@@ -22,6 +22,7 @@ namespace BlazeSyncFix
         //minimum duration of a sleep. vanilla llb requires 0.02s
         protected static readonly float MIN_SLEEP_DURATION = 0.02f;
         protected static readonly float MIN_SLEEP_DURATION_FRAMES = 0.6f;
+        protected static readonly float SLEEP_DAMPENING_FACTOR = 0.9f;
         protected static readonly float LOCAL_ADVANTAGE_SMOOTHING_FACTOR = 0.1f;
         protected static readonly float RUN_AHEAD_SMOOTHING_FACTOR = 0.1f;
         protected static readonly float REMOTE_FRAME_ESTIMATE_PING_FACTOR = 0.65f;
@@ -133,6 +134,7 @@ namespace BlazeSyncFix
             }
             float sleepTime = (remoteAverage - localAverage) * World.DELTA_TIME;
             if (sleepTime < MIN_SLEEP_DURATION) return 0;
+            sleepTime *= SLEEP_DAMPENING_FACTOR;
             resetLocalAdvantage = true;
             Plugin.Logger.LogInfo($"sleep duration: {sleepTime}");
             return System.Math.Min(sleepTime, MAX_SLEEP_DURATION);

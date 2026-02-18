@@ -202,8 +202,6 @@ namespace BlazeSyncFix
                 }
                 if (interval > 0)
                 {
-                    interval *= TimeSyncSimple_Patches.GGPO_VANILLA_ALIGN_TIMES_FACTOR;
-                    interval = System.Math.Min(interval, 0.5f);
                     Plugin.Logger.LogInfo($"waiting for {interval}s");
                     P2P.Wait(interval);
                     /*
