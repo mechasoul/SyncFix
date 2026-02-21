@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using BlazeDevNet.FrameRecorder;
 using BlazeSyncFix.Patches;
 using LLBML.Messages;
 using LLBML.Players;
@@ -22,13 +24,47 @@ namespace BlazeSyncFix
 
         public static readonly int SLEEP_CHECK_INTERVAL = 60; //frames in between sleep checks
         public static readonly int ADVANTAGE_UPDATE_INTERVAL = 60; //frames in between sending advantage to peers
+        /*
+         * note on this one:
+         * i can reliably get difference in rollback size between players down to ~0.75f under good network conditions.
+         * ideally we'd get it to 0 but i can't really do that with the options for frame timing that unity presents.
+         * 0.75f is a small enough difference to probably be imperceptible to any player, even in a game like llb, so 
+         * combined with the fact that the "advantaged" player is effectively random instead of always host as in 
+         * vanilla, we're already doing very well
+         * 
+         * i mused for a bit anyway over whether there's a way to eliminate this advantage completely and the best i
+         * can come up with is to forcibly oscillate advantage between players if it's in that ~0.5 - 0.75f range. 
+         * this basically completely eliminates any advantage at the cost of pausing for 1f every (this duration * 2),
+         * ie, 1f every 20s. so it's essentially one player potentially randomly having a ~0.75f rollback advantage 
+         * vs both players pausing for 1f every 20s and increasing rollback variance slightly (eg, to use numbers from
+         * a ~100 ping test, we go from say P1 having 50% 3f and 50% 4f rollbacks and P2 having 90% 4f and 10% 5f
+         * rollbacks to both players having 25% 3f, 70% 4f, 5% 5f). i'm genuinely not sure if this is better. i don't 
+         * think the pausing would be perceptible to anyone, but increasing rollback variance by a slight amount might
+         * actually be noticeable and not worth eliminating such a tiny advantage. i'll try it for a bit and see i guess
+         */
+        public static readonly int MAX_SMALL_ADVANTAGE_DURATION = 300;
         private TimeSync[] timeSync = [new TimeSyncHost(0), new TimeSync(1), new TimeSync(2), new TimeSync(3)];
         private int nextAdvantageUpdate = int.MaxValue;
         private int lastAdvantageUpdate = -1;
-        public int NextAdvantageUpdate { get => nextAdvantageUpdate; }
-        public int LastAdvantageUpdate { get => lastAdvantageUpdate; }
         private int nextRecommendedSleep = int.MaxValue;
         private int lastSleep = -1;
+        private int nextSmallAdvantageSleep = int.MaxValue;
+
+        public int NextAdvantageUpdate { get => nextAdvantageUpdate; }
+        public int LastAdvantageUpdate { get => lastAdvantageUpdate; }
+        public int NextSmallAdvantageSleep { get => nextSmallAdvantageSleep; }
+
+        public Stopwatch stopwatch = new Stopwatch();
+        public void StartTimer()
+        {
+            stopwatch.Start();
+        }
+        public void StopTimer()
+        {
+            stopwatch.Stop();
+            FrameRecorders.GetFrameRecorder<float>("actualwait").Record(Sync.curFrame, stopwatch.ElapsedMilliseconds / 1000f);
+            stopwatch.Reset();
+        }
 
         static SyncFixManager() { }
 
@@ -58,6 +94,7 @@ namespace BlazeSyncFix
             lastAdvantageUpdate = -1;
             nextRecommendedSleep = int.MaxValue;
             lastSleep = -1;
+            nextSmallAdvantageSleep = int.MaxValue;
         }
 
         /// <summary>
@@ -69,6 +106,7 @@ namespace BlazeSyncFix
 
             UpdateNextRecommendedSleep();
             UpdateNextAdvantageTime();
+            UpdateNextSmallSleepTime();
         }
 
         /// <summary>
@@ -85,10 +123,23 @@ namespace BlazeSyncFix
             lastSleep = Sync.curFrame;
         }
 
-        public void OnSleep()
+        public void UpdateNextSmallSleepTime()
+        {
+            nextSmallAdvantageSleep = Sync.curFrame + MAX_SMALL_ADVANTAGE_DURATION;
+        }
+
+        public void OnSleep(float sleepDuration)
         {
             UpdateNextRecommendedSleep();
             UpdateLastSleep();
+            UpdateNextSmallSleepTime();
+            float sleepFrames = sleepDuration * World.FPS;
+            ForAllValidOthers(i =>
+            {
+                timeSync[i].OnSleep(sleepFrames);
+                SendLocalAdvantageToPlayer(i, true);
+            });
+            UpdateNextAdvantageTime();
         }
 
         /// <summary>
@@ -109,11 +160,11 @@ namespace BlazeSyncFix
         /// then 0 is returned instead. the returned value can't be higher than TimeSync.MAX_SLEEP_DURATION</returns>
         /// <remarks>note it's assumed that any nonzero value returned by this method will immediately be used for a sleep. consequently, if this returns nonzero, then
         /// current local advantage will be reset, under the assumption that a sleep is occurring and so the value is now stale. something to be aware of</remarks>
-        public float GetRecommendedSleepInterval(int playerIndex)
+        public float GetRecommendedSleepInterval(int playerIndex, bool allowSmallSleep)
         {
             if (!SyncFixConfig.Instance.Enabled) throw new InvalidOperationException("asked for sleep interval when sync fix disabled?");
 
-            return timeSync[playerIndex].GetSleepInterval();
+            return timeSync[playerIndex].GetSleepInterval(allowSmallSleep);
         }
 
         /// <summary>
@@ -132,19 +183,19 @@ namespace BlazeSyncFix
         /// update current local advantage vs all players for the given frame. ggpo calls after input/rollback checking, so a corresponding timing for llb is like Sync.AlignTimes prefix
         /// </summary>
         /// <param name="frame"></param>
-        public void UpdateLocalAdvantage(int frame)
+        public void UpdateFrameAdvantage(int frame)
         {
             if (!SyncFixConfig.Instance.Enabled) return;
 
-            ForAllValidOthers(i => timeSync[i].UpdateCurrentLocalFrameAdvantage(frame));
+            ForAllValidOthers(i => timeSync[i].UpdateCurrentFrameAdvantage(frame));
         }
 
-        public void SendLocalAdvantageToPlayer(int i)
+        public void SendLocalAdvantageToPlayer(int i, bool notifySleep = false)
         {
             if (!SyncFixConfig.Instance.Enabled) return;
 
             byte[] bytes = BitConverter.GetBytes(GetCurrentLocalAdvantage(i));
-            Message toSend = new Message((Msg)SyncFixMessages.GAME_LOCAL_ADVANTAGE, P2P.localPeer.playerNr, -1,
+            Message toSend = new Message((Msg)SyncFixMessages.GAME_LOCAL_ADVANTAGE, P2P.localPeer.playerNr, notifySleep ? 1 : 0,
                 bytes, bytes.Length);
             Plugin.Logger.LogInfo($"sending local advantage: {toSend}");
             P2P.SendToPlayerNr(i, toSend);
@@ -157,6 +208,10 @@ namespace BlazeSyncFix
             float adv = BitConverter.ToSingle((byte[])message.ob, 0);
             Plugin.Logger.LogInfo($"received remote adv: {adv}");
             UpdateRemoteAdvantage(message.playerNr, adv);
+            if (message.index == 1)
+            {
+                UpdateNextSmallSleepTime();
+            }
         }
 
         /// <summary>
@@ -166,23 +221,8 @@ namespace BlazeSyncFix
         /// <param name="remoteAdvantage">the provided remote advantage, in frames</param>
         public void UpdateRemoteAdvantage(int playerIndex, float remoteAdvantage)
         {
-            timeSync[playerIndex].UpdateCurrentRemoteFrameAdvantage(remoteAdvantage);
+            timeSync[playerIndex].UpdateRemoteFrameAdvantage(remoteAdvantage);
         }
-
-        /// <summary>
-        /// record the local and remote frame advantage for a given remote player index for the given frame. uses current local and remote advantage. 
-        /// these records are used to calculate an average. these averages are used to determine the final numbers for sleep intervals. ggpo calls whenever input is sent, so hook into like Sync.SendSync
-        /// </summary>
-        /// <param name="playerIndex"></param>
-        /// <param name="frame"></param>
-        //
-        public void RecordAdvantage(int playerIndex, int frame)
-        {
-            if (!SyncFixConfig.Instance.Enabled) return;
-
-            timeSync[playerIndex].RecordFrameAdvantage(frame);
-        }
-
 
 
         //replacement for llb's Sync.AlignTimes based on the ggpo time sync algorithm
@@ -192,12 +232,13 @@ namespace BlazeSyncFix
             if (Sync.curFrame > NextRecommendedSleep)
             {
                 float interval = 0;
+                bool canSmallSleep = Sync.curFrame > NextSmallAdvantageSleep;
                 for (int i = 0; i < Sync.nPlayers; i++)
                 {
                     if (Sync.othersInfo[i] != null)
                     {
                         //align with the most advantaged player
-                        interval = System.Math.Max(interval, GetRecommendedSleepInterval(i));
+                        interval = System.Math.Max(interval, GetRecommendedSleepInterval(i, canSmallSleep));
                     }
                 }
                 if (interval > 0)
@@ -307,17 +348,6 @@ namespace BlazeSyncFix
 
                 }
             });
-        }
-
-        public void RecordAdvantage()
-        {
-            if (!SyncFixConfig.Instance.Enabled) return;
-
-            //check to make sure we're using ggpo, since we don't make that check from the caller
-            if (StateManager.IsUsingGGPO())
-            {
-                RecordAdvantage(Sync.sendToPlayerNr, Sync.curFrame);
-            }
         }
 
         public static void ForAllValidOthers(Action<int> action)

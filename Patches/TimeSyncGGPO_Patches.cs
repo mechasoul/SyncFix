@@ -7,6 +7,7 @@ using System.Text;
 using BlazeSyncFix.Utils;
 using HarmonyLib;
 using LLBML.Players;
+using LLScreen;
 using Multiplayer;
 using UnityEngine;
 using UnityEngine.Assertions;
@@ -37,7 +38,7 @@ namespace BlazeSyncFix.Patches
             if (StateManager.IsUsingGGPO())
             {
                 //entirely replace the original Sync.AlignTimes with our new version
-                SyncFixManager.Instance.UpdateLocalAdvantage(Sync.curFrame);
+                SyncFixManager.Instance.UpdateFrameAdvantage(Sync.curFrame);
                 SyncFixManager.Instance.GGPOAlignTimes();
                 return false;
             }
@@ -46,15 +47,6 @@ namespace BlazeSyncFix.Patches
                 SyncFixManager.Instance.SimpleAlignTimes();
                 return false;
             }
-            //else if (P2P.isHost)
-            //{
-            //    /*
-            //     * if we're host, then not everyone has sync fix (or we would have been using ggpo).
-            //     * run our mock ggpo method
-            //     */
-            //    SyncFixManager.UpdateLocalAdvantage(Sync.curFrame);
-
-            //}
             /*
              * - if we're client and host doesn't have sync fix:
              * defensively manage our own time alignment so we're not punished by host advantage. can't do anything about 
@@ -74,32 +66,6 @@ namespace BlazeSyncFix.Patches
         public static void InitPostfix()
         {
             SyncFixManager.Instance.Reset();
-        }
-
-        //just inserts a call to SyncExtended.RecordAdvantage in an appropriate place. ggpo records advantage vs a player
-        //whenever it sends input to that player, so this is just us doing the same. note that we're a bit lazy here and
-        //aren't loading any params, since llb loads relevant values into static fields (eg Sync.sendToPlayerNr), so we
-        //can just use those
-        [HarmonyPatch(typeof(Sync), nameof(Sync.SendSync))]
-        [HarmonyTranspiler]
-        public static IEnumerable<CodeInstruction> SendSyncTranspiler(IEnumerable<CodeInstruction> instructions)
-        {
-            CodeMatcher cm = new CodeMatcher(instructions);
-            cm.MatchEndForward(new InstructionBuilder()
-                .OpCode(OpCodes.Ldsfld).Operand(AccessTools.StaticFieldRefAccess<Sync.OtherInfo[]>(typeof(Sync), nameof(Sync.othersInfo)))
-                .OpCode(OpCodes.Ldsfld).Operand(AccessTools.Field(typeof(Sync), nameof(Sync.sendToPlayerNr)))
-                .OpCode(OpCodes.Ldelem_Ref)
-                .OpCode(OpCodes.Stloc_2)
-                .BuildAsMatch());
-            cm.Advance(1).Insert(
-                Transpilers.EmitDelegate(() =>
-                {
-                    if (SyncFixConfig.Instance.Enabled)
-                    {
-                        SyncFixManager.Instance.RecordAdvantage();
-                    }
-                }));
-            return cm.InstructionEnumeration();
         }
 
         /*
@@ -137,7 +103,8 @@ namespace BlazeSyncFix.Patches
             if (message.msg == Msg.P2P_TIMED)
             {
                 JKMAAHELEMF vector2i = (JKMAAHELEMF)message.ob;
-                vector2i.CGJJEHPPOAN = vector2i.CGJJEHPPOAN / 2;
+                //adding the extra frame is beneficial from my testing. not sure why. time taken for unity to poll received messages?
+                vector2i.CGJJEHPPOAN = (vector2i.CGJJEHPPOAN / 2) + (int)(World.DELTA_TIME * 1000);
                 message = new Message(message.msg, message.playerNr, message.index, vector2i, message.obSize);
             }
             return true;
@@ -177,7 +144,7 @@ namespace BlazeSyncFix.Patches
                 if (StateManager.IsUsingGGPO())
                 {
                     //send advantage to all players
-                    SyncFixManager.ForAllValidOthers(SyncFixManager.Instance.SendLocalAdvantageToPlayer);
+                    SyncFixManager.ForAllValidOthers(i => SyncFixManager.Instance.SendLocalAdvantageToPlayer(i));
                     SyncFixManager.Instance.UpdateNextAdvantageTime();
                 }
                 //else if (!P2P.isHost && StateManager.HostHasSyncFix)
@@ -202,7 +169,38 @@ namespace BlazeSyncFix.Patches
             }
         }
 
-        
+        [HarmonyPatch(typeof(P2P), nameof(P2P.CWait))]
+        [HarmonyPostfix]
+        public static IEnumerator CWaitPostfix(IEnumerator __result, P2P __instance)
+        {
+            while (__result.MoveNext()) yield return __result.Current;
+
+            SyncFixManager.Instance.StopTimer();
+        }
+
+
+        //[HarmonyPatch(typeof(P2P), nameof(P2P.CWait))]
+        //[HarmonyPrefix]
+        //public static bool RedirectCWait(P2P __instance, float wait, ref IEnumerator __result)
+        //{
+        //    Console.WriteLine("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        //    __result = CWait_Helper(__instance, wait);
+        //    return false;
+        //}
+
+        //private static IEnumerator CWait_Helper(P2P instance, float wait)
+        //{
+        //    SyncFixManager.Instance.StartTimer();
+        //    yield return new WaitForSeconds(wait);
+        //    SyncFixManager.Instance.StopTimer();
+        //    Console.WriteLine("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB");
+        //    if (!Sync.isAwaiting)
+        //    {
+        //        OGONAGCFDPK.PFDNCNGCEDB(false);
+        //    }
+        //    P2P.coroutineWait = null;
+        //    yield break;
+        //}
 
         //insert call to update stuff on sleep. we transpiler instead of postfix for edge-case scenarios where the sleep is skipped, 
         //so we only update if a sleep actually occurs
@@ -213,15 +211,16 @@ namespace BlazeSyncFix.Patches
             CodeMatcher cm = new CodeMatcher(instructions);
             cm.End();
             cm.Insert(
-                Transpilers.EmitDelegate(() =>
+                new CodeInstruction(OpCodes.Ldarg_0),
+                Transpilers.EmitDelegate((float f) =>
                 {
                     if (SyncFixConfig.Instance.Enabled)
                     {
-                        SyncFixManager.Instance.OnSleep();
+                        SyncFixManager.Instance.StartTimer();
+                        SyncFixManager.Instance.OnSleep(f);
                     }
                 }));
             return cm.InstructionEnumeration();
         }
-
     }
 }

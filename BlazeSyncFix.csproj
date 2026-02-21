@@ -53,6 +53,9 @@
 			<HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\LLBlaze\LLBlaze_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
+		<Reference Include="ca.gov.mechasoulindustries.llb.my.cute.devnet">
+			<HintPath>..\..\..\AppData\Roaming\Thunderstore Mod Manager\DataFolder\LethalLeagueBlaze\profiles\syncfix\BepInEx\plugins\devnet\Debug\net35\ca.gov.mechasoulindustries.llb.my.cute.devnet.dll</HintPath>
+		</Reference>
 	</ItemGroup>
 
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">

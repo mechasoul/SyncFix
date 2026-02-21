@@ -61,31 +61,36 @@ namespace BlazeSyncFix.Patches
 
             if (!P2P.isHost && !StateManager.HostHasSyncFix && Sync.curFrame % 60 == 0)
             {
-                float fixedDeltaTime = Time.fixedDeltaTime;
-                float currentTime = Sync.curFrame * fixedDeltaTime;
-                float minTime = currentTime;
-                for (int j = 0; j < Sync.nPlayers; j++)
+                SelfVanillaAlignTimes();
+            }
+        }
+
+        private static void SelfVanillaAlignTimes()
+        {
+            float fixedDeltaTime = Time.fixedDeltaTime;
+            float currentTime = Sync.curFrame * fixedDeltaTime;
+            float minTime = currentTime;
+            for (int j = 0; j < Sync.nPlayers; j++)
+            {
+                Sync.OtherInfo otherInfo = Sync.othersInfo[j];
+                if (otherInfo != null)
                 {
-                    Sync.OtherInfo otherInfo = Sync.othersInfo[j];
-                    if (otherInfo != null)
+                    float otherTime = Sync.statusInput.otherReceived[j] * fixedDeltaTime;
+                    otherTime += otherInfo.peer.ping * 0.5f;
+                    if (otherTime < minTime)
                     {
-                        float otherTime = Sync.statusInput.otherReceived[j] * fixedDeltaTime;
-                        otherTime += otherInfo.peer.ping * 0.5f;
-                        if (otherTime < minTime)
-                        {
-                            minTime = otherTime;
-                        }
+                        minTime = otherTime;
                     }
                 }
+            }
 
-                float aheadTime = currentTime - minTime;
-                aheadTime *= 0.75f;
-                if (aheadTime >= 0.02f)
-                {
-                    aheadTime = Mathf.Min(aheadTime, 0.5f);
-                    Plugin.Logger.LogInfo($"sending self-timesync with time: {aheadTime}");
-                    P2P.SendToPlayerNr(P2P.localPeer.playerNr, new Message(Msg.P2P_TIME_ALIGN, Sync.matchNr, Mathf.RoundToInt(aheadTime * 1000f), null, -1));
-                }
+            float aheadTime = currentTime - minTime;
+            aheadTime *= 0.75f;
+            if (aheadTime >= 0.02f)
+            {
+                aheadTime = Mathf.Min(aheadTime, 0.5f);
+                Plugin.Logger.LogInfo($"sending self-timesync with time: {aheadTime}");
+                P2P.SendToPlayerNr(P2P.localPeer.playerNr, new Message(Msg.P2P_TIME_ALIGN, Sync.matchNr, Mathf.RoundToInt(aheadTime * 1000f), null, -1));
             }
         }
 
