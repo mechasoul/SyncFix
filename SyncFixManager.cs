@@ -107,7 +107,23 @@ namespace BlazeSyncFix
             UpdateNextRecommendedSleep();
             UpdateNextAdvantageTime();
             UpdateNextSmallSleepTime();
+
+            if (StateManager.IsUsingGGPO())
+            {
+                float maxPing = GetMaxPing();
+                ForAllValidOthers(i => timeSync[i].SetSleepThreshold(maxPing));
+            }
+            else if (!StateManager.IsUsingGGPO() && P2P.isHost)
+            {
+                float maxPing = GetMaxPing();
+                for (int i = 0; i < Sync.nPlayers; i++)
+                {
+                    timeSync[i].SetRunAheadEstimateBounds(maxPing);
+                }
+            }
         }
+
+        
 
         /// <summary>
         /// call sometime after game has started (eg on Sync.Start, except i think that gets inlined so don't do that) to start time sync checks. 
@@ -133,11 +149,18 @@ namespace BlazeSyncFix
             UpdateNextRecommendedSleep();
             UpdateLastSleep();
             UpdateNextSmallSleepTime();
-            float sleepFrames = sleepDuration * World.FPS;
             ForAllValidOthers(i =>
             {
-                timeSync[i].OnSleep(sleepFrames);
-                SendLocalAdvantageToPlayer(i, true);
+                if (StateManager.IsUsingGGPO())
+                {
+                    float sleepFrames = sleepDuration * World.FPS;
+                    timeSync[i].OnSleep(sleepFrames);
+                    SendLocalAdvantageToPlayer(i, true);
+                }
+                else if (P2P.isHost)
+                {
+                    //?
+                }
             });
             UpdateNextAdvantageTime();
         }
@@ -262,7 +285,7 @@ namespace BlazeSyncFix
             float minimumFrame = float.MaxValue;
             for (int i = 0; i < Sync.nPlayers; i++)
             {
-                minimumFrame = System.Math.Min(minimumFrame, timeSync[i].UpdateRemoteFrameEstimate());
+                minimumFrame = System.Math.Min(minimumFrame, timeSync[i].UpdateCurrentFrameEstimate());
             }
 
             //for every player (including us), update the estimate of how far ahead they are of the slowest peer, and send them a sleep if they're too far ahead
@@ -294,8 +317,7 @@ namespace BlazeSyncFix
         {
             float selfDelay = Player.EPlayers()
                         .Where(player => player.NGLDMOLLPLK && Sync.IsValidOther(player.CJFLMDNNMIE)) //player.inMatch && Sync.IsValidOther(player.nr)
-                        .Select(player => player.KLEEADMGHNE.ping) //player.peer.ping
-                        .Average();
+                        .Average(player => player.KLEEADMGHNE.ping); //player.peer.ping
             selfDelay /= 2; //adjust for one-way trip time
             P2P.instance.StartCoroutine(CSendSelfTimeAlignAfterDelay(selfDelay, time));
         }
@@ -359,6 +381,14 @@ namespace BlazeSyncFix
                     action(i);
                 }
             }
+        }
+
+        private static float GetMaxPing()
+        {
+            float maxPing = Player.EPlayers()
+                    .Where(player => player.NGLDMOLLPLK && Sync.IsValidOther(player.CJFLMDNNMIE)) //player.inMatch && Sync.IsValidOther(player.nr)
+                    .Max(player => player.KLEEADMGHNE.ping); //player.peer.ping
+            return maxPing;
         }
     }
 }

@@ -23,9 +23,12 @@ namespace BlazeSyncFix
         protected static readonly int SMALL_ADVANTAGE_MAINTAINED_DURATION = 10;
         protected static readonly float LOCAL_ADVANTAGE_SMOOTHING_FACTOR = 0.1f;
 
-        protected static readonly float MIN_SLEEP_DURATION_FRAMES = 0.6f;
+        protected static readonly int ESTIMATE_SLEEP_CHECK_INTERVAL = 240;
+        protected static readonly float RUNAHEAD_ESTIMATE_FRAMES_UPPER = 0.65f;
+        protected static readonly float RUNAHEAD_ESTIMATE_FRAMES_LOWER = 0.25f;
         protected static readonly float RUN_AHEAD_SMOOTHING_FACTOR = 0.1f;
-        protected static readonly float REMOTE_FRAME_ESTIMATE_PING_FACTOR = 0.65f;
+        protected static readonly float RUN_AHEAD_ACCUMULATOR_THRESHOLD = 1.5f;
+        protected static readonly float CURRENT_FRAME_ESTIMATE_PING_FACTOR = 0.5f;
 
         //the other (remote) player's playerIndex
         protected readonly int playerIndex;
@@ -40,17 +43,25 @@ namespace BlazeSyncFix
         //each player keeps track of their own advantage vs each other player in this way
         protected float currentRemoteAdvantage;
         protected float lastRemoteAdvantage;
+        protected float minSleepThreshold = 0f;
+        protected float smallSleepThreshold = 0f;
         protected int smallSleepThresholdFrames;
         //for estimating timesync when peers don't have the mod installed
         private int nextRecommendedSleep = int.MaxValue;
         private int lastSleep = -1;
-        private float remoteFrameEstimate = -1;
+        private float currentFrameEstimate = -1;
         private int lastRemoteFrameEstimate = -1;
         private float runAheadEstimate;
+        protected float runAheadAccumulator = 0f;
+        protected int noRunAheadUpdatesUntil = -1;
+        protected float runAheadEstimateFramesUpper = 0f;
+        protected float runAheadEstimateFramesLower = 0f;
 
 
         public float CurrentLocalAdvantage { get => currentLocalAdvantage; }
         public float CurrentRemoteAdvantage { get => currentRemoteAdvantage; }
+        public float MinSleepThreshold { get => minSleepThreshold; }
+        public float SmallSleepThreshold { get => smallSleepThreshold; }
         public int NextRecommendedSleep { get => nextRecommendedSleep; }
         public int LastSleep { get => lastSleep; }
         //public float RemoteFrameEstimate
@@ -61,8 +72,10 @@ namespace BlazeSyncFix
         //        return remoteFrameEstimate;
         //    }
         //}
-        public float RemoteFrameEstimate { get => remoteFrameEstimate; }
+        public float CurrentFrameEstimate { get => currentFrameEstimate; }
         public float RunAheadEstimate { get => runAheadEstimate; }
+        public float RunAheadEstimateUpperBound { get => runAheadEstimateFramesUpper; }
+        public float RunAheadEstimateLowerBound { get => runAheadEstimateFramesLower; }
 
         public TimeSync(int playerIndex)
         {
@@ -74,12 +87,33 @@ namespace BlazeSyncFix
             currentLocalAdvantage = 0f;
             currentRemoteAdvantage = 0f;
             lastRemoteAdvantage = 0f;
+            minSleepThreshold = 0f;
+            smallSleepThreshold = 0f;
             smallSleepThresholdFrames = 0;
             nextRecommendedSleep = SyncFixManager.SLEEP_CHECK_INTERVAL;
             lastSleep = -1;
-            remoteFrameEstimate = -1;
+
+            currentFrameEstimate = -1;
             lastRemoteFrameEstimate = -1;
             runAheadEstimate = 0f;
+            runAheadAccumulator = 0f;
+            noRunAheadUpdatesUntil = -1;
+            runAheadEstimateFramesUpper = 0f;
+            runAheadEstimateFramesLower = 0f;
+        }
+
+        public void SetSleepThreshold(float ping)
+        {
+            minSleepThreshold = Mathf.Clamp(ping / 0.1f, 1f, 2f);
+            smallSleepThreshold = Mathf.Clamp(ping / 0.15f * 0.5f, 0.5f, 0.75f);
+            Plugin.Logger.LogInfo($"set min sleep threshold: {minSleepThreshold}, small sleep threshold: {smallSleepThreshold}");
+        }
+
+        public void SetRunAheadEstimateBounds(float ping)
+        {
+            runAheadEstimateFramesUpper = Mathf.Clamp(ping / 0.1f * 0.65f, 0.65f, 1.5f);
+            runAheadEstimateFramesLower = Mathf.Clamp(ping / 0.1f * 0.25f, 0.25f, 0.75f);
+            Plugin.Logger.LogInfo($"set lower bound: {runAheadEstimateFramesLower}, upper bound: {runAheadEstimateFramesUpper}");
         }
 
         //updates the current local frame advantage. runs every frame. estimate the other player's frame based on the most recent input received from them + their ping.
@@ -119,7 +153,7 @@ namespace BlazeSyncFix
             }
             float sleepFrames = (remoteAverage - localAverage) / 2;
             CheckSmallSleepThreshold(sleepFrames);
-            if (sleepFrames >= MIN_SLEEP_FRAMES)
+            if (sleepFrames >= MinSleepThreshold)
             {
                 float sleepDuration = sleepFrames * World.DELTA_TIME;
                 Plugin.Logger.LogInfo($"sleep duration: {sleepDuration}");
@@ -135,7 +169,7 @@ namespace BlazeSyncFix
 
         private void CheckSmallSleepThreshold(float sleepFrames)
         {
-            if (sleepFrames >= MIN_SMALL_SLEEP_ADVANTAGE)
+            if (sleepFrames >= SmallSleepThreshold)
             {
                 smallSleepThresholdFrames++;
             }
@@ -149,45 +183,74 @@ namespace BlazeSyncFix
         {
             currentLocalAdvantage += frames;
             currentRemoteAdvantage -= frames;
+            lastRemoteAdvantage -= frames;
+            smallSleepThresholdFrames = 0;
+
         }
 
-        public float UpdateRemoteFrameEstimate()
+        public float UpdateCurrentFrameEstimate()
         {
-            remoteFrameEstimate = EstimateRemoteFrame();
+            currentFrameEstimate = EstimateCurrentFrame();
             lastRemoteFrameEstimate = Sync.curFrame;
-            return remoteFrameEstimate;
+            return currentFrameEstimate;
         }
 
         private void UpdateRemoteFrameEstimateIfNeeded()
         {
             if (lastRemoteFrameEstimate < Sync.curFrame)
             {
-                UpdateRemoteFrameEstimate();
+                UpdateCurrentFrameEstimate();
             }
         }
 
-        public virtual float EstimateRemoteFrame()
+        public virtual float EstimateCurrentFrame()
         {
-            return Sync.statusInput.otherReceived[playerIndex] + Player.GetPlayer(playerIndex).peer.ping * REMOTE_FRAME_ESTIMATE_PING_FACTOR * World.FPS;
+            float estimate = (Player.GetPlayer(playerIndex).peer.ping * CURRENT_FRAME_ESTIMATE_PING_FACTOR + (World.DELTA_TIME * 1.0f)) * World.FPS;
+            Plugin.Logger.LogInfo($"current frame: {Sync.curFrame}, received: {Sync.statusInput.otherReceived[playerIndex]}, estimated travel time: {estimate}, est remote: {estimate + Sync.statusInput.otherReceived[playerIndex]}");
+            return Sync.statusInput.otherReceived[playerIndex] + estimate;
         }
 
         public virtual float UpdateRunAheadEstimate(float minimumFrame)
         {
-            float estimate = RemoteFrameEstimate - minimumFrame;
+            if (Sync.curFrame < noRunAheadUpdatesUntil) return 0f;
+            else if (Sync.curFrame == noRunAheadUpdatesUntil) noRunAheadUpdatesUntil = -1;
+
+            float estimate = CurrentFrameEstimate - minimumFrame;
             float prevEstimate = RunAheadEstimate;
             runAheadEstimate = Mathf.Lerp(RunAheadEstimate, estimate, RUN_AHEAD_SMOOTHING_FACTOR);
-            Plugin.Logger.LogInfo($"updating run ahead estimate for player index {playerIndex}: estimated run ahead {estimate}, previous: {prevEstimate}, new: {RunAheadEstimate}");
+            UpdateRunAheadFrames();
+            FrameRecorders.Record($"runahead_p{playerIndex+1}", Sync.curFrame, RunAheadEstimate);
+            Plugin.Logger.LogInfo($"{Sync.curFrame} runahead estimate for p{playerIndex}: estimated run ahead {estimate}, prev: {prevEstimate}, new: {RunAheadEstimate}");
             return RunAheadEstimate;
+        }
+
+        public void UpdateRunAheadFrames()
+        {
+
+            if (RunAheadEstimate > RunAheadEstimateUpperBound)
+            {
+                float added = RunAheadEstimate - RunAheadEstimateUpperBound;
+                runAheadAccumulator += added;
+                Plugin.Logger.LogInfo($"added {added} to runahead frames, now: {runAheadAccumulator}");
+            }
+            else if (RunAheadEstimate < RunAheadEstimateLowerBound)
+            {
+                float added = RunAheadEstimate - RunAheadEstimateLowerBound;
+                runAheadAccumulator = System.Math.Max(0f, runAheadAccumulator + added);
+                Plugin.Logger.LogInfo($"added {added} to runahead frames, now: {runAheadAccumulator}");
+            } 
         }
 
         public float GetSleepIntervalEstimate()
         {
-            if (RunAheadEstimate < MIN_SLEEP_DURATION_FRAMES) return 0;
+            if (runAheadAccumulator < RUN_AHEAD_ACCUMULATOR_THRESHOLD) return 0;
 
-            float sleep = RunAheadEstimate * Time.fixedDeltaTime;
+            float sleep = System.Math.Max(RunAheadEstimate * World.DELTA_TIME, World.DELTA_TIME);
+            noRunAheadUpdatesUntil = (int)(Sync.curFrame + System.Math.Ceiling((sleep + Player.GetPlayer(playerIndex).peer.ping) * World.FPS) + 2); 
             runAheadEstimate = 0f;
-            lastSleep = (int)RemoteFrameEstimate;
-            nextRecommendedSleep = (int)RemoteFrameEstimate + SyncFixManager.SLEEP_CHECK_INTERVAL;
+            lastSleep = Sync.curFrame;
+            nextRecommendedSleep = Sync.curFrame + ESTIMATE_SLEEP_CHECK_INTERVAL;
+            runAheadAccumulator = 0f;
             return sleep;
         }
     }

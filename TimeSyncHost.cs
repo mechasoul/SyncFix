@@ -8,7 +8,7 @@ namespace BlazeSyncFix
 {
     public class TimeSyncHost(int playerIndex) : TimeSync(playerIndex)
     {
-        public override float EstimateRemoteFrame()
+        public override float EstimateCurrentFrame()
         {
             return Sync.curFrame;
         }

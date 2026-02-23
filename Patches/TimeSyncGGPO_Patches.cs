@@ -35,6 +35,8 @@ namespace BlazeSyncFix.Patches
         {
             if (!SyncFixConfig.Instance.Enabled) return true;
 
+            if (Sync.curFrame < 20) return false;
+
             if (StateManager.IsUsingGGPO())
             {
                 //entirely replace the original Sync.AlignTimes with our new version
@@ -98,13 +100,16 @@ namespace BlazeSyncFix.Patches
         [HarmonyPrefix]
         public static bool RedirectSendToPlayerNr(LocalPeer __instance, ref Message message)
         {
+            if (!SyncFixConfig.Instance.Enabled) return true;
+
             //hopefully no one else has made this change somewhere or this would overcorrect.
             //could be fixed by recalculating everything but im sure its fine
             if (message.msg == Msg.P2P_TIMED)
             {
                 JKMAAHELEMF vector2i = (JKMAAHELEMF)message.ob;
+                vector2i.CGJJEHPPOAN = (int)(vector2i.CGJJEHPPOAN * 0.65f);
                 //adding the extra frame is beneficial from my testing. not sure why. time taken for unity to poll received messages?
-                vector2i.CGJJEHPPOAN = (vector2i.CGJJEHPPOAN / 2) + (int)(World.DELTA_TIME * 1000);
+                //vector2i.CGJJEHPPOAN += (int)(World.DELTA_TIME * 1000);
                 message = new Message(message.msg, message.playerNr, message.index, vector2i, message.obSize);
             }
             return true;
@@ -138,6 +143,8 @@ namespace BlazeSyncFix.Patches
         [HarmonyPostfix]
         public static void UpdatePostfix(P2P __instance)
         {
+            if (!SyncFixConfig.Instance.Enabled) return;
+
             //require Sync.curFrame > SyncExtended.LastSleep + 1 so we don't send outdated advantage immediately after a sleep in edge cases
             if (P2P.isPinging && Sync.isActive && Sync.curFrame > SyncFixManager.Instance.NextAdvantageUpdate && Sync.curFrame > SyncFixManager.Instance.LastSleep + 1)
             {
@@ -175,7 +182,7 @@ namespace BlazeSyncFix.Patches
         {
             while (__result.MoveNext()) yield return __result.Current;
 
-            SyncFixManager.Instance.StopTimer();
+            if (SyncFixConfig.Instance.Enabled) SyncFixManager.Instance.StopTimer();
         }
 
 

@@ -32,7 +32,7 @@ namespace BlazeSyncFix.Patches
          * negligible impact anyway
          */
         public static float GGPO_VANILLA_ALIGN_TIMES_FACTOR = 0.9f;
-        public static float SIMPLE_VANILLA_ALIGN_TIMES_FACTOR = 0.75f;
+        public static float SIMPLE_VANILLA_ALIGN_TIMES_FACTOR = 0.85f;
         public static float PING_ESTIMATE = 0.5f;
 
         /*
