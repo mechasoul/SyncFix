@@ -40,7 +40,6 @@ namespace BlazeSyncFix.Patches
             if (StateManager.IsUsingGGPO())
             {
                 //entirely replace the original Sync.AlignTimes with our new version
-                SyncFixManager.Instance.UpdateFrameAdvantage(Sync.curFrame);
                 SyncFixManager.Instance.GGPOAlignTimes();
                 return false;
             }

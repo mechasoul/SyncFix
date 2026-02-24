@@ -80,5 +80,15 @@ namespace BlazeSyncFix.Patches
             }
         }
 
+        //default behaviour adds a ping of 80 when resetting ping, which gives a bad reading for the first 4 seconds.
+        //need to use ping to calculate some stuff, so we change that
+        [HarmonyPatch(typeof(Peer), nameof(Peer.ResetPing))]
+        [HarmonyPostfix]
+        public static void ResetPingPostfix(Peer __instance)
+        {
+            __instance.pingsPrev[0] = -1;
+            __instance.ping = 0f;
+        }
+
     }
 }
