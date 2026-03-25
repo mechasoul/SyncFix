@@ -15,49 +15,49 @@ using UnityEngine.Assertions;
 namespace BlazeSyncFix.Patches
 {
     /// <summary>
-    /// contains harmony patches used for implementing the new ggpo time sync logic. ggpo's time sync algorithm requires
+    /// contains harmony patches used for implementing the new ggpo-based time sync logic. ggpo's time sync algorithm requires
     /// all players to keep track of their current local advantage vs other players (based on the player's current frame
     /// and estimates of the other players' current frames), and to also periodically send this current local advantage
     /// to all other players. this gives better results than having a single player handle everyone's timing as in llb,
-    /// but it does require all players to participate. this means that ggpo algorithm can't be used unless all players
-    /// have this mod installed.
+    /// but it does require all players to participate. this means that ggpo's algorithm can't be used unless all players
+    /// have this mod installed, hence i'm calling this the group algorithm.
     /// 
     /// we do make a best-effort attempt to even things out in the case that not all players have the mod installed. for
-    /// those patches, see TimeSyncSimple_Patches.
+    /// those patches, see TimeSyncSolo_Patches.
     /// </summary>
     [HarmonyPatch]
-    public class TimeSyncGGPO_Patches
+    public class TimeSyncGroup_Patches
     {
-        //this is the big one. a few cases here, depending on whether other players have the patch or not
+        //main entry point for most changed logic. a few cases here, depending on whether other players have the patch or not
         [HarmonyPatch(typeof(Sync), nameof(Sync.AlignTimes))]
         [HarmonyPrefix]
         public static bool RedirectAlignTimes()
         {
             if (!SyncFixConfig.Instance.Enabled) return true;
 
-            if (Sync.curFrame < 20) return false;
-
-            if (StateManager.IsUsingGGPO())
+            if (StateManager.IsUsingGroup())
             {
                 //entirely replace the original Sync.AlignTimes with our new version
-                SyncFixManager.Instance.GGPOAlignTimes();
+                SyncFixManager.Instance.GroupAlignTimes();
                 return false;
             }
             else if (P2P.isHost)
             {
-                SyncFixManager.Instance.SimpleAlignTimes();
+                if (Sync.curFrame < 60) return false;
+                SyncFixManager.Instance.SoloHostAlignTimes();
                 return false;
             }
             /*
+             * else, we're client and not using group syncfix. we have the following cases:
              * - if we're client and host doesn't have sync fix:
              * defensively manage our own time alignment so we're not punished by host advantage. can't do anything about 
              * the other clients, every man for himself
              * manage by running our own self-only version of AlignTimes in postfix and ignoring received time alignments.
              * - if we're client and host has sync fix:
-             * don't do anything. host will handle it via their self-applied delay, to try to ensure fairness for all 
+             * don't do anything. host will handle it via the solo host syncfix logic, to try to ensure fairness for all 
              * clients regardless of whether they have sync fix.
              * 
-             * in any case, we run AlignTimes.
+             * in any case, we don't need to do anything special here.
              */
             return true;
         }
@@ -69,8 +69,9 @@ namespace BlazeSyncFix.Patches
             SyncFixManager.Instance.Reset();
         }
 
+        //fix for incorrect initial time alignment (minor cause of unfairness alongside AlignTimes)
         /*
-         * quick note on this one: ping is a measure of round trip time. it's the time it takes to send a message to a peer
+         * note on this one: ping is a measure of round trip time. it's the time it takes to send a message to a peer
          * plus the time it takes for their response to arrive. so when we send a message to a peer, our best estimate for
          * how long that will take is ping / 2 (realistically it won't be exactly this because of network asymmetry but it's
          * the best we can do).
@@ -88,7 +89,9 @@ namespace BlazeSyncFix.Patches
          * an advantage; running behind is beneficial in rollback).
          * 
          * ultimately the effects are minor because time sync will kick in soon enough and fix any large difference in timing,
-         * but it does give host a slight advantage at the start of the match. fix it by halving the delays used for all 
+         * but it does give host a slight advantage at the start of the match. (could also have a measurable impact at certain
+         * low pings where the incorrect timings isn't enough to trigger a sleep but is enough to give host a consistent advantage).
+         * fix it by halving the delays used for all 
          * P2P_TIMED messages (bonus: this doesn't require any client-side changes so it'll work for all peers even if they 
          * don't have the mod, so long as host does)
          * 
@@ -97,7 +100,7 @@ namespace BlazeSyncFix.Patches
          */
         [HarmonyPatch(typeof(LocalPeer), nameof(LocalPeer.SendToPlayerNr))]
         [HarmonyPrefix]
-        public static bool RedirectSendToPlayerNr(LocalPeer __instance, ref Message message)
+        public static bool RedirectSendToPlayerNr(LocalPeer __instance, int receiverPlayerNr, ref Message message)
         {
             if (!SyncFixConfig.Instance.Enabled) return true;
 
@@ -106,16 +109,16 @@ namespace BlazeSyncFix.Patches
             if (message.msg == Msg.P2P_TIMED)
             {
                 JKMAAHELEMF vector2i = (JKMAAHELEMF)message.ob;
-                vector2i.CGJJEHPPOAN = (int)(vector2i.CGJJEHPPOAN * 0.65f);
-                //adding the extra frame is beneficial from my testing. not sure why. time taken for unity to poll received messages?
-                //vector2i.CGJJEHPPOAN += (int)(World.DELTA_TIME * 1000);
+                //time here is in milliseconds. one frame is World.DELTA_TIME * 1000. extra 30f helps stabilize things at game start
+                // -> impact may actually be pretty minor. could maybe remove the extra delay...?
+                vector2i.CGJJEHPPOAN = (int)(vector2i.CGJJEHPPOAN * 0.5f + 30000f * World.DELTA_TIME);
                 message = new Message(message.msg, message.playerNr, message.index, vector2i, message.obSize);
             }
             return true;
         }
 
         //patches GameStatesGame.ProcessMsgGame. sets the time for first recommended sleep / advantage send
-        //wanted to patch this as Sync.Start postfix but i think Start gets inlined because it's so simple. so just transpiler it in instead
+        //wanted to patch this as Sync.Start postfix but i think Start gets inlined because it's so simple. just transpiler it in instead
         [HarmonyPatch(typeof(OGONAGCFDPK), nameof(OGONAGCFDPK.IMEGGOOAADG))]
         [HarmonyTranspiler]
         public static IEnumerable<CodeInstruction> IMEGGOOAADGTranspiler(IEnumerable<CodeInstruction> instructions)
@@ -134,9 +137,9 @@ namespace BlazeSyncFix.Patches
         }
 
         /*
-         * ggpo sends local advantage as a part of ping messages. i'm just going to send them separately, because piggybacking them onto
-         * ping messages is very invasive & hacky (have to replace obSize or something) and might interfere with stuff. 
-         * but still send them at the same timing (ie, from P2P.Update)
+         * ggpo sends local advantage as a part of ping messages. technically we could do the same and avoid adding any extra
+         * network traffic by like, replacing obSize or something? but that's really hacky and might interfere with stuff.
+         * just send them at the same timing (ie, from P2P.Update)
          */
         [HarmonyPatch(typeof(P2P), nameof(P2P.Update))]
         [HarmonyPostfix]
@@ -147,65 +150,23 @@ namespace BlazeSyncFix.Patches
             //require Sync.curFrame > SyncExtended.LastSleep + 1 so we don't send outdated advantage immediately after a sleep in edge cases
             if (P2P.isPinging && Sync.isActive && Sync.curFrame > SyncFixManager.Instance.NextAdvantageUpdate && Sync.curFrame > SyncFixManager.Instance.LastSleep + 1)
             {
-                if (StateManager.IsUsingGGPO())
+                if (StateManager.IsUsingGroup())
                 {
                     //send advantage to all players
                     SyncFixManager.ForAllValidOthers(i => SyncFixManager.Instance.SendLocalAdvantageToPlayer(i));
                     SyncFixManager.Instance.UpdateNextAdvantageTime();
                 }
-                //else if (!P2P.isHost && StateManager.HostHasSyncFix)
-                //{
-                //    //send advantage to host
-                //    SyncFixManager.Instance.SendLocalAdvantageToPlayer(0);
-                //    SyncFixManager.Instance.UpdateNextAdvantageTime();
-                //}
-                //else if (P2P.isHost)
-                //{
-                //    SyncFixManager.ForAllValidOthers(i =>
-                //    {
-                //        if (!StateManager.PeerHasMod(i))
-                //        {
-                //            float remoteFrame = SyncFixManager.EstimateRemoteFrame(i);
-                //            //this is (host's frame - peer i's local frame); ie, peer i's local advantage
-                //            float remoteAdvantage = Sync.curFrame - remoteFrame;
-                //            SyncFixManager.UpdateRemoteAdvantage(i, remoteAdvantage);
-                //        }
-                //    });
-                //}
             }
         }
 
-        [HarmonyPatch(typeof(P2P), nameof(P2P.CWait))]
-        [HarmonyPostfix]
-        public static IEnumerator CWaitPostfix(IEnumerator __result, P2P __instance)
-        {
-            while (__result.MoveNext()) yield return __result.Current;
-
-            if (SyncFixConfig.Instance.Enabled) SyncFixManager.Instance.StopTimer();
-        }
-
-
+        //debug for recording actual wait times
         //[HarmonyPatch(typeof(P2P), nameof(P2P.CWait))]
-        //[HarmonyPrefix]
-        //public static bool RedirectCWait(P2P __instance, float wait, ref IEnumerator __result)
+        //[HarmonyPostfix]
+        //public static IEnumerator CWaitPostfix(IEnumerator __result, P2P __instance)
         //{
-        //    Console.WriteLine("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-        //    __result = CWait_Helper(__instance, wait);
-        //    return false;
-        //}
+        //    while (__result.MoveNext()) yield return __result.Current;
 
-        //private static IEnumerator CWait_Helper(P2P instance, float wait)
-        //{
-        //    SyncFixManager.Instance.StartTimer();
-        //    yield return new WaitForSeconds(wait);
-        //    SyncFixManager.Instance.StopTimer();
-        //    Console.WriteLine("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB");
-        //    if (!Sync.isAwaiting)
-        //    {
-        //        OGONAGCFDPK.PFDNCNGCEDB(false);
-        //    }
-        //    P2P.coroutineWait = null;
-        //    yield break;
+        //    if (SyncFixConfig.Instance.Enabled) SyncFixManager.Instance.StopTimer();
         //}
 
         //insert call to update stuff on sleep. we transpiler instead of postfix for edge-case scenarios where the sleep is skipped, 
@@ -222,7 +183,7 @@ namespace BlazeSyncFix.Patches
                 {
                     if (SyncFixConfig.Instance.Enabled)
                     {
-                        SyncFixManager.Instance.StartTimer();
+                        //SyncFixManager.Instance.StartTimer();
                         SyncFixManager.Instance.OnSleep(f);
                     }
                 }));

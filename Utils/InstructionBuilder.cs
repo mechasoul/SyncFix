@@ -7,6 +7,8 @@ using HarmonyLib;
 
 namespace BlazeSyncFix.Utils
 {
+    //brought this in for the huge AlignTimes transpiler, which we now don't use
+    //TODO delete
     public class InstructionBuilder
     {
         private List<CodeInstruction> instructions = [];

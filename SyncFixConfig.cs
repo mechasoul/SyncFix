@@ -14,15 +14,21 @@ namespace BlazeSyncFix
 
         private ConfigFile _configFile;
         private ConfigEntry<bool> enabled;
+        private ConfigEntry<bool> showDebugInfo;
+        private ConfigEntry<KeyCode> debugInfoKey;
 
 
         private SyncFixConfig(ConfigFile configFile)
         {
             _configFile = configFile;
             enabled = configFile.Bind(new ConfigDefinition("Sync Fix", "Enable host advantage fix"), true);
+            showDebugInfo = configFile.Bind(new ConfigDefinition("Sync Fix", "Show debug info ingame"), true);
+            debugInfoKey = configFile.Bind("Sync Fix", "Toggle debug info key", KeyCode.None);
         }
 
         public bool Enabled { get => enabled.Value; set => enabled.Value = value; }
+        public bool ShowDebugInfo { get => showDebugInfo.Value; set => showDebugInfo.Value = value; }
+        public KeyCode DebugInfoKey { get => debugInfoKey.Value; set => debugInfoKey.Value = value; }
 
         internal static void LoadConfig(ConfigFile configFile)
         {

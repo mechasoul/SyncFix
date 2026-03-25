@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFramework>net35</TargetFramework>
 		<AssemblyName>ca.gov.mechasoulindustries.llb.my.cute.syncfix</AssemblyName>
-		<Product>LLB Sync Fix</Product>
+		<Product>Sync Fix</Product>
 		<Version>0.1.0</Version>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<LangVersion>latest</LangVersion>

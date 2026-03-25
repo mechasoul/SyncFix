@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using BlazeSyncFix.Utils;
 using HarmonyLib;
 using Multiplayer;
 
@@ -14,28 +15,8 @@ namespace BlazeSyncFix.Patches
     [HarmonyPatch]
     public class LobbyState_Patches
     {
-        ////patches PlatformSteam.Notify, PlatformDev.Notify (for devnet)
-        //[HarmonyPatch(typeof(KKMGLMJABKH), nameof(KKMGLMJABKH.BANACEJFPKH))]
-        //[HarmonyPatch(typeof(LBLHOCKALBK), nameof(LBLHOCKALBK.BANACEJFPKH))]
-        //[HarmonyPostfix]
-        //public static void BANACEJFPKHPostfix(KKMGLMJABKH __instance, PlatformNotification JGLJENHAMIM, float BKPKJLGNIMB = -1f)
-        //{
-        //    //note that we also do stuff on peer join/leave, except we do it from elsewhere since we need info for the relevant peer.
-        //    //see LocalHost patches below
-        //    switch (JGLJENHAMIM)
-        //    {
-        //        case PlatformNotification.LOBBY_ENTERED:
-        //            StateManager.ResetState();
-        //            break;
-        //        case PlatformNotification.LOBBY_REENTERED:
-        //            //keep player state when reentering lobby. just reset mode (it'll be resent at game start if still valid)
-        //            StateManager.ResetMode();
-        //            break;
-        //        default:
-        //            break;
-        //    }
-        //}
-
+        //TODO: is this ALWAYS called? should look into if eg a peer can dc in a way that this isn't called, which would leave their slot confirmed.
+        //maybe not an issue tho since either their slot is empty and not factored into anything or a new player takes their slot and the state is reset?
         [HarmonyPatch(typeof(LocalHost), nameof(LocalHost.OnOtherLeft))]
         [HarmonyPostfix]
         public static void OnOtherLeftPostfix(LocalHost __instance, Peer otherPeer)
@@ -50,18 +31,19 @@ namespace BlazeSyncFix.Patches
             StateManager.PeerJoined(otherPlayerNr);
         }
 
+        //parameterless StartGame is only called by host on setup, so send group syncfix message here if appropriate
         //GameStatesLobbyOnline.StartGame
         [HarmonyPatch(typeof(HDLIJDBFGKN), nameof(HDLIJDBFGKN.OAACLLGMFLH), [])]
         [HarmonyPostfix]
         public static void OAACLLGMFLHPostfix(HDLIJDBFGKN __instance)
         {
-            //parameterless StartGame is only called by host on setup, so send ggpo message here if appropriate
             if (StateManager.AllPeersConfirmed())
             {
-                StateManager.SendAllGGPOMessage();
+                StateManager.SendAllGroupMessage();
             }
         }
 
+        //resets peer mod state when entering an online lobby
         //GameStatesLobbyOnline.KAfterOpen
         [HarmonyPatch(typeof(HDLIJDBFGKN), nameof(HDLIJDBFGKN.DJLJONJDDDO))]
         [HarmonyPostfix]
@@ -78,10 +60,12 @@ namespace BlazeSyncFix.Patches
             {
                 StateManager.ResetMode();
             }
+            NetUtils.ResetMaxPing();
         }
 
         //default behaviour adds a ping of 80 when resetting ping, which gives a bad reading for the first 4 seconds.
         //need to use ping to calculate some stuff, so we change that
+        //TODO does this even work? idk. not really needed anyway since i think loading the game always takes at least 4 seconds anyway
         [HarmonyPatch(typeof(Peer), nameof(Peer.ResetPing))]
         [HarmonyPostfix]
         public static void ResetPingPostfix(Peer __instance)

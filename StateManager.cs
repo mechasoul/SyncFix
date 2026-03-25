@@ -13,23 +13,20 @@ namespace BlazeSyncFix
 {
     
     /// <summary>
-    /// manages mod state. determines what mode to operate in, based on the status of other players & whether they have the mod installed.
+    /// manages mod state. determines what mode to operate in, based on the status of other players & whether they have the mod installed
     /// </summary>
     public class StateManager
     {
         /// <summary>
         /// represents the current mode that the lobby is running in. determined by whether all other players have this mod installed.
-        /// if all players have the mod installed, then GGPO mode (based on ggpo duh) can be used, for a slightly more elaborate and 
-        /// slightly more stable experience. if at least one other player does not have the mod installed, then SIMPLE mode is used, which 
-        /// fixes LLB's host advantage when playing as the client.
+        /// if all players have the mod installed, then group mode (based on ggpo) can be used, for a slightly more elaborate and 
+        /// slightly more stable experience. if at least one other player does not have the mod installed, then solo mode is used, which 
+        /// is a less perfect solution but doesn't require other players' cooperation
         /// </summary>
-        //TODO test adding artifical delay as host to see if we can eliminate client disadvantage for client players without the plugin
-        //when we're host. would offset the innate advantage gained by being able to fix host advantage when the player is client but
-        //not when the player is host
         public enum SyncFixMode
         {
-            SIMPLE,
-            GGPO
+            SOLO,
+            GROUP
         }
 
         public enum LobbyPeerModStatus
@@ -38,17 +35,24 @@ namespace BlazeSyncFix
             CONFIRMED,
         }
 
-        public static SyncFixMode CurrentMode = SyncFixMode.SIMPLE;
+        public static SyncFixMode CurrentMode = SyncFixMode.SOLO;
         private static LobbyPeerModStatus[] peerModStatus = [LobbyPeerModStatus.UNKNOWN, LobbyPeerModStatus.UNKNOWN, LobbyPeerModStatus.UNKNOWN, LobbyPeerModStatus.UNKNOWN];
         public static bool HostHasSyncFix = false;
 
+        /// <summary>
+        /// registers mod-specific message callbacks with LLBML
+        /// </summary>
         public static void RegisterLobbyMessages()
         {
             MessageApi.RegisterCustomMessage(Plugin.Instance.Info, (ushort)SyncFixMessages.LOBBY_MOD_CHECK, SyncFixMessages.LOBBY_MOD_CHECK.ToString(), ReceiveModCheck);
             MessageApi.RegisterCustomMessage(Plugin.Instance.Info, (ushort)SyncFixMessages.LOBBY_MOD_REPLY, SyncFixMessages.LOBBY_MOD_REPLY.ToString(), ReceiveModReply);
-            MessageApi.RegisterCustomMessage(Plugin.Instance.Info, (ushort)SyncFixMessages.GAME_USE_GGPO, SyncFixMessages.GAME_USE_GGPO.ToString(), ReceiveGGPOMessage);
+            MessageApi.RegisterCustomMessage(Plugin.Instance.Info, (ushort)SyncFixMessages.GAME_USE_GROUP, SyncFixMessages.GAME_USE_GROUP.ToString(), ReceiveGroupMessage);
         }
 
+        /// <summary>
+        /// call when a peer joins lobby to manage mod state. initializes the handshake to register that peer as having syncfix installed
+        /// </summary>
+        /// <param name="playerIndex"></param>
         public static void PeerJoined(int playerIndex)
         {
             if (!ShouldManageState()) return;
@@ -63,18 +67,15 @@ namespace BlazeSyncFix
             }
         }
 
+        /// <summary>
+        /// call when a peer leaves lobby to manage mod state
+        /// </summary>
+        /// <param name="playerIndex"></param>
         public static void PeerLeft(int playerIndex)
         {
             if (!ShouldManageState()) return;
 
             SetPeerModStatus(playerIndex, LobbyPeerModStatus.UNKNOWN);
-        }
-
-        public static void SendModCheck()
-        {
-            if (!ShouldManageState()) return;
-
-            ForAllRemotePeersInMatch(i => P2P.SendToPlayerNr(i, new Message((Msg)SyncFixMessages.LOBBY_MOD_CHECK, P2P.localPeer.playerNr, -1, null, -1)));
         }
 
         public static void SendModCheck(int playerIndex)
@@ -104,36 +105,32 @@ namespace BlazeSyncFix
 
         public static bool AllPeersConfirmed()
         {
+            //use group if no player exists that is both in the match and unconfirmed
             bool value = !peerModStatus.Where((status, index) => Player.GetPlayer(index).IsInMatch && status == LobbyPeerModStatus.UNKNOWN).Any();
             Plugin.Logger.LogInfo($"all peers confirmed: {value}");
             return value;
         }
 
-        public static void SendAllGGPOMessage()
+        public static void SendAllGroupMessage()
         {
             if (!ShouldManageState()) return;
 
-            ForAllRemotePeersInMatch(i => P2P.SendToPlayerNr(i, new Message((Msg)SyncFixMessages.GAME_USE_GGPO, P2P.localPeer.playerNr, -1, null, -1)));
-            CurrentMode = SyncFixMode.GGPO;
-            Plugin.Logger.LogInfo($"sent all peers GGPO message");
+            ForAllRemotePeersInMatch(i => P2P.SendToPlayerNr(i, new Message((Msg)SyncFixMessages.GAME_USE_GROUP, P2P.localPeer.playerNr, -1, null, -1)));
+            CurrentMode = SyncFixMode.GROUP;
+            Plugin.Logger.LogInfo($"sent all peers group message");
         }
 
-        public static void ReceiveGGPOMessage(Message message)
+        public static void ReceiveGroupMessage(Message message)
         {
             if (!SyncFixConfig.Instance.Enabled) return;
 
-            CurrentMode = SyncFixMode.GGPO;
-            Plugin.Logger.LogInfo("received ggpo message");
+            CurrentMode = SyncFixMode.GROUP;
+            Plugin.Logger.LogInfo("received group message");
         }
 
-        public static bool IsUsingGGPO()
+        public static bool IsUsingGroup()
         {
-            return CurrentMode == SyncFixMode.GGPO;
-        }
-
-        public static LobbyPeerModStatus GetPeerModStatus(int playerIndex)
-        {
-            return peerModStatus[playerIndex];
+            return CurrentMode == SyncFixMode.GROUP;
         }
 
         private static void SetPeerModStatus(int playerIndex, LobbyPeerModStatus status)
@@ -143,17 +140,20 @@ namespace BlazeSyncFix
             peerModStatus[playerIndex] = status;
         }
 
-        public static bool PeerHasMod(int playerIndex)
-        {
-            return GetPeerModStatus(playerIndex) == LobbyPeerModStatus.CONFIRMED;
-        }
-
+        /// <summary>
+        /// total mod state reset. use when entering a new online lobby
+        /// </summary>
         public static void ResetState()
         {
             ResetPeerModStatus();
             ResetMode();
         }
 
+        //TODO nullreferenceexception from somewhere in here, i think i accidentally clicked quickmatch after backing out of an existing lobby? maybe something with lobby setup in quickmatch
+        // ^ might just be a consequence of devnet qm error
+        /// <summary>
+        /// resets the mod state of all players
+        /// </summary>
         public static void ResetPeerModStatus()
         {
             if (!SyncFixConfig.Instance.Enabled) return;
@@ -167,9 +167,12 @@ namespace BlazeSyncFix
             Plugin.Logger.LogInfo($"reset status: {String.Join(", ", peerModStatus.Select(status => status.ToString()).ToArray())}");
         }
 
+        /// <summary>
+        /// resets currently chosen syncfix mode. can use this instead of ResetState when reentering a lobby
+        /// </summary>
         public static void ResetMode()
         {
-            CurrentMode = SyncFixMode.SIMPLE;
+            CurrentMode = SyncFixMode.SOLO;
         }
 
         private static bool IsLocalPeer(int playerIndex)
@@ -177,6 +180,11 @@ namespace BlazeSyncFix
             return playerIndex == P2P.localPeer.playerNr;
         }
 
+        /// <summary>
+        /// convenience method for determining if we should be managing other players' mod states. true if we're host and mod is enabled (clients don't manage state;
+        /// they just respond to any potential mod checks sent by host and switch to group mode if the host says to)
+        /// </summary>
+        /// <returns></returns>
         private static bool ShouldManageState()
         {
             return P2P.isHost && SyncFixConfig.Instance.Enabled;

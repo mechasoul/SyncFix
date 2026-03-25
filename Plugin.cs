@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using BepInEx;
 using BepInEx.Logging;
+using BlazeSyncFix.Utils;
 using HarmonyLib;
 
 namespace BlazeSyncFix;
@@ -25,6 +26,7 @@ public class Plugin : BaseUnityPlugin
         Logger = base.Logger;
         Instance = this;
         SyncFixConfig.LoadConfig(Config);
+        PathUtils.Init(this.Info);
         _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
         _harmony.PatchAll();
         Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
@@ -36,7 +38,7 @@ public class Plugin : BaseUnityPlugin
         SyncFixManager.RegisterGameMessages();
         LLBML.Utils.ModDependenciesUtils.RegisterToModMenu(this.Info, new List<String>
         {
-            "Patches time sync to fix host advantage"
+            "Fixes host advantage"
         });
     }
 
