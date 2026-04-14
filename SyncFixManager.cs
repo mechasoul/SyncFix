@@ -26,18 +26,7 @@ namespace BlazeSyncFix
         //TODO move this group-specific stuff to groupcomponent or something. left here from old structure
         public static readonly int GROUP_SLEEP_CHECK_INTERVAL = 120; //frames in between sleep checks
         public static readonly int GROUP_ADVANTAGE_UPDATE_INTERVAL = 60; //frames in between sending advantage to peers
-        /*
-         * in vanilla Sync.AlignTimes, the game estimates current time for all players, and then calculates 
-         * (current time - furthest back player's current time) for all players. this is the amount that each player
-         * is running ahead and is used to tell them how long to pause for, in order to try to align their time with the
-         * slowest player. 
-         * when determining pause time, this resulting number is multiplied by a constant. in vanilla it's 0.75; ie, the
-         * time that players pause for is 0.75 * how far ahead they are. this is an "err on the side of caution"
-         * thing and helps to avoid oscillating pauses and stuff since the current frame numbers are all estimates anyway.
-         * this serves the same purpose for our logic. i tried a few different values and ended up at basically the same
-         */
-        public static float GROUP_VANILLA_ALIGN_TIMES_FACTOR = 0.8f;
-        public static float SOLO_VANILLA_ALIGN_TIMES_FACTOR = 0.8f;
+        
 
         static SyncFixManager() { }
 
@@ -100,7 +89,18 @@ namespace BlazeSyncFix
             UpdateNextAdvantageTime();
         }
 
-        
+        public void MidMatchReset()
+        {
+            if (!SyncFixConfig.Instance.Enabled) return;
+
+            for (int i = 0; i < Sync.nPlayers; i++)
+            {
+                timeSync[i].ResetActiveComponent();
+            }
+            UpdateNextAdvantageTime();
+            UpdateNextRecommendedSleep();
+            lastSleep = -1;
+        }
 
         /// <summary>
         /// call sometime after game has started (eg on Sync.Start, except i think that gets inlined so don't do that) to start time sync checks. 
@@ -181,7 +181,6 @@ namespace BlazeSyncFix
             byte[] bytes = BitConverter.GetBytes(GetCurrentLocalAdvantage(i));
             Message toSend = new Message((Msg)SyncFixMessages.GAME_LOCAL_ADVANTAGE, P2P.localPeer.playerNr, notifySleep ? 1 : 0,
                 bytes, bytes.Length);
-            Plugin.Logger.LogInfo($"sending local advantage: {toSend}");
             P2P.SendToPlayerNr(i, toSend);
         }
 
@@ -190,7 +189,6 @@ namespace BlazeSyncFix
             if (!SyncFixConfig.Instance.Enabled) return;
 
             float adv = BitConverter.ToSingle((byte[])message.ob, 0);
-            Plugin.Logger.LogInfo($"received remote adv: {adv}");
             UpdateRemoteAdvantage(message.playerNr, adv);
         }
 
@@ -208,6 +206,8 @@ namespace BlazeSyncFix
         //replacement for llb's Sync.AlignTimes based on the ggpo time sync algorithm
         public void GroupAlignTimes()
         {
+            if (Sync.isAwaiting) return;
+
             ForAllValidOthers(i => timeSync[i].FrameUpdate());
             //sleep logic: sleep if enough time has passed or if we need to emergency sleep
             bool shouldSleep = Sync.curFrame > NextRecommendedSleep;
@@ -219,7 +219,7 @@ namespace BlazeSyncFix
                     if (shouldSleep) break;
                 }
             }
-            if (shouldSleep)
+            if (shouldSleep && !Sync.isAwaiting)
             {
                 float interval = 0;
                 for (int i = 0; i < Sync.nPlayers; i++)
@@ -232,7 +232,6 @@ namespace BlazeSyncFix
                 }
                 if (interval > 0)
                 {
-                    interval *= GROUP_VANILLA_ALIGN_TIMES_FACTOR;
                     Plugin.Logger.LogInfo($"waiting for {interval}s");
                     P2P.Wait(interval);
                 }
@@ -242,6 +241,8 @@ namespace BlazeSyncFix
         //replacement for Sync.AlignTimes for when at least one player doesn't have syncfix. similar to vanilla, but fairer
         public void SoloHostAlignTimes()
         {
+            if (Sync.isAwaiting) return;
+
             //update every client's remote frame and get minimum frame
             float minimumFrame = float.MaxValue;
             for (int i = 0; i < Sync.nPlayers; i++)
@@ -262,7 +263,6 @@ namespace BlazeSyncFix
                     float sleep = timeSync[i].GetSleepInterval();
                     if (sleep > 0)
                     {
-                        sleep *= SOLO_VANILLA_ALIGN_TIMES_FACTOR;
                         Plugin.Logger.LogInfo($"sleeping p{i + 1} for {sleep}");
                         timeSync[i].OnSleep(sleep * World.FPS);
                         if (i == 0)

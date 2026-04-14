@@ -16,13 +16,13 @@ namespace BlazeSyncFix
     /// </summary>
     public class TimeSyncGroupComponent : TimeSyncComponentBase
     {
-        //max duration of a sleep, in seconds
-        private static readonly float MAX_SLEEP_DURATION = 15 * World.DELTA_TIME;
-        //min duration of a sleep, in seconds
+        //max duration of a sleep, in seconds (same as vanilla)
+        private static readonly float MAX_SLEEP_DURATION = 0.5f;
+        //min duration of a sleep, in seconds (1f = 0.0167s; 0.02s vanilla)
         private static readonly float MIN_SLEEP_DURATION = World.DELTA_TIME;
         //controls how quickly local advantage values can change
         private static readonly float LOCAL_ADVANTAGE_UPDATE_RATE = 0.1f;
-        private static readonly float RECENT_SLEEP_UPPER_BOUND_FACTOR_GROUP = 0.25f;
+        private static readonly float RECENT_SLEEP_BASE_FACTOR = 0.25f;
 
 
         /*
@@ -69,17 +69,12 @@ namespace BlazeSyncFix
             float estimatedTravelFrames = NetUtils.GetTravelTimeEstimate(Sync.othersInfo[playerIndex].peer.ping);
             float remoteFrame = receivedFrame + estimatedTravelFrames;
             float localAdvantage = remoteFrame - localFrame;
-            //float prevAdvantage = CurrentLocalAdvantage;
             currentLocalAdvantage = Mathf.Lerp(CurrentLocalAdvantage, localAdvantage, LOCAL_ADVANTAGE_UPDATE_RATE);
-            //Plugin.Logger.LogInfo($"updating local frame adv; local frame: {localFrame}, received input: {receivedFrame}, estimated travel frames: {estimatedTravelFrames}, remote frame: {remoteFrame}. " +
-            //    $"updated local advantage {prevAdvantage} -> {CurrentLocalAdvantage}");
             //update remote. kinda weird to lerp this, should maybe just update it immediately?
             currentRemoteAdvantage = Mathf.Lerp(CurrentRemoteAdvantage, lastRemoteAdvantage, 0.2f);
             //as in ggpo's algorithm, divide by two here to account for double-counting the difference, since both local advantage and other player's local advantage
             //are calculated by remote - local. looks weird but is correct. do the math
             accumulator.FrameUpdate(Sync.curFrame, (CurrentRemoteAdvantage - CurrentLocalAdvantage) / 2);
-            //FrameRecorders.GetFrameRecorder<float>("local").Record(Sync.curFrame, CurrentLocalAdvantage);
-            //FrameRecorders.GetFrameRecorder<float>("remote").Record(Sync.curFrame, CurrentRemoteAdvantage);
             base.FrameUpdate();
         }
 
@@ -87,8 +82,7 @@ namespace BlazeSyncFix
         {
             if (!accumulator.ThresholdReached()) return 0;
 
-            float sleepDuration = accumulator.currentValue * World.DELTA_TIME;
-            Plugin.Logger.LogInfo($"sleep duration: {sleepDuration}");
+            float sleepDuration = accumulator.currentValue * World.DELTA_TIME * ALIGN_TIMES_FACTOR;
             return Mathf.Clamp(sleepDuration, MIN_SLEEP_DURATION, MAX_SLEEP_DURATION);
         }
 
@@ -97,7 +91,8 @@ namespace BlazeSyncFix
             return accumulator.ThresholdVeryReached();
         }
 
-        //immediately updating local/remote advantage by sleep duration seems correct, but maybe instant change like this is weird?
+        //immediately updating local/remote advantage by sleep duration seems correct,
+        //but maybe instant change like this is weird, given how we approach most other things?
         public override void OnSleep(float frames)
         {
             currentLocalAdvantage += frames;
@@ -112,9 +107,9 @@ namespace BlazeSyncFix
             lastRemoteAdvantage = remoteAdvantage;
         }
 
-        protected override float GetRecentSleepUpperBoundFactor()
+        protected override float GetRecentSleepBaseFactor()
         {
-            return RECENT_SLEEP_UPPER_BOUND_FACTOR_GROUP;
+            return RECENT_SLEEP_BASE_FACTOR;
         }
 
         protected override float GetRecentSleepWindow()

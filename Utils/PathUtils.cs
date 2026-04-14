@@ -52,6 +52,8 @@ namespace BlazeSyncFix.Utils
                 }
             }
             sb.Append($"P{P2P.localPeer.playerNr}");
+            sb.Append("_");
+            sb.Append(StateManager.IsUsingGroup() ? "GROUP" : "SOLO");
             return sb.ToString();
         }
     }

@@ -35,6 +35,11 @@ namespace BlazeSyncFix
             activeComponent.Reset();
         }
 
+        public void ResetActiveComponent()
+        {
+            activeComponent.Reset();
+        }
+
         public void FrameUpdate()
         {
             activeComponent.FrameUpdate();

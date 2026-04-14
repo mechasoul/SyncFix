@@ -35,6 +35,18 @@ namespace BlazeSyncFix.Patches
         {
             if (!SyncFixConfig.Instance.Enabled) return true;
 
+            //debug info
+            //Sync.OtherInfo otherInfo = P2P.isHost ? Sync.othersInfo[1] : Sync.othersInfo[0];
+            //Console.WriteLine($"status: {Sync.state}, doAwait: {Sync.doAwait}, isAwaiting: {Sync.isAwaiting}, doContinue: {Sync.doContinue}, isContinuing: {Sync.isContinuing}, timeDoContinue: {Sync.timeDoContinue}, " +
+            //    $"nNetworkOkAgain: {Sync.nNetworkOkAgain}, readyToContinue: {Sync.readyToContinue}, other readyToContinue: {otherInfo.readyToContinue}, " +
+            //    $"other isAwaiting: {otherInfo.isAwaiting}, playersInMatch check: {otherInfo.playersInMatch == Sync.GetPlayersInMatch()}, handledByAll check: {Sync.statusInput.handledByAll} > {Sync.curFrame - 30}");
+
+            if (Sync.doAwait)
+            {
+                SyncFixManager.Instance.MidMatchReset();
+            }
+            if (Sync.isAwaiting) return false;
+
             if (StateManager.IsUsingGroup())
             {
                 //entirely replace the original Sync.AlignTimes with our new version
@@ -109,9 +121,13 @@ namespace BlazeSyncFix.Patches
             if (message.msg == Msg.P2P_TIMED)
             {
                 JKMAAHELEMF vector2i = (JKMAAHELEMF)message.ob;
-                //time here is in milliseconds. one frame is World.DELTA_TIME * 1000. extra 30f helps stabilize things at game start
-                // -> impact may actually be pretty minor. could maybe remove the extra delay...?
-                vector2i.CGJJEHPPOAN = (int)(vector2i.CGJJEHPPOAN * 0.5f + 30000f * World.DELTA_TIME);
+                float newDelay = vector2i.CGJJEHPPOAN * 0.5f;
+                //add an extra 30f delay to everyone if continuing from await
+                if (((Msg)vector2i.GCPKPHMKLBN) == Msg.MP_SYNC_CONTINUE)
+                {
+                    newDelay += 30000f * World.DELTA_TIME;
+                }
+                vector2i.CGJJEHPPOAN = (int)newDelay;
                 message = new Message(message.msg, message.playerNr, message.index, vector2i, message.obSize);
             }
             return true;
@@ -148,7 +164,7 @@ namespace BlazeSyncFix.Patches
             if (!SyncFixConfig.Instance.Enabled) return;
 
             //require Sync.curFrame > SyncExtended.LastSleep + 1 so we don't send outdated advantage immediately after a sleep in edge cases
-            if (P2P.isPinging && Sync.isActive && Sync.curFrame > SyncFixManager.Instance.NextAdvantageUpdate && Sync.curFrame > SyncFixManager.Instance.LastSleep + 1)
+            if (P2P.isPinging && Sync.isActive && !Sync.doAwait && !Sync.isAwaiting && Sync.curFrame > SyncFixManager.Instance.NextAdvantageUpdate && Sync.curFrame > SyncFixManager.Instance.LastSleep + 1)
             {
                 if (StateManager.IsUsingGroup())
                 {
@@ -169,7 +185,7 @@ namespace BlazeSyncFix.Patches
         //    if (SyncFixConfig.Instance.Enabled) SyncFixManager.Instance.StopTimer();
         //}
 
-        //insert call to update stuff on sleep. we transpiler instead of postfix for edge-case scenarios where the sleep is skipped, 
+        //insert call to update stuff on sleep. we transpiler instead of postfix for edge-case scenarios where the sleep is skipped (eg when awaiting), 
         //so we only update if a sleep actually occurs
         [HarmonyPatch(typeof(P2P), nameof(P2P.Wait))]
         [HarmonyTranspiler]
@@ -189,5 +205,50 @@ namespace BlazeSyncFix.Patches
                 }));
             return cm.InstructionEnumeration();
         }
+
+        /*
+         * Sync.UpdateAwait requires Sync.statusInput.handledByAll > Sync.curFrame - 30 as a prerequisite to continue.
+         * when player A occurs, our sleep logic causes player B to sleep aggressively before await is triggered, because the game (correctly)
+         * detects that player B is running severely ahead of player A. this causes players' current frames to become unaligned, which can 
+         * cause this check to never become true again; since sleeps are disabled during awaits, this timing disparity can't possibly be
+         * fixed until the game continues, but the game can't continue until the timing disparity is fixed. this causes lengthy awaits to
+         * never reconnect (note also that once traffic is reestablished, Sync.statusInput.handledByAll and Sync.curFrame will continue 
+         * advancing at the same rate of 1/frame, since both update during await. so yeah it never fixes itself)
+         * 
+         * i'm not totally sure what the purpose of this check is in the first place. my best guess is that it's a check to see if traffic
+         * has been reestablished, but that seems unlikely since the game also requires Sync.otherInfo.isAwaiting for all other players,
+         * which is only set by messages received from other players (ie, we're already checking that). it could also be a general-purpose
+         * sanity check to make sure that eg one player isn't running 10 seconds ahead of the other or something ridiculous like that? but 
+         * the kinda specific nature of the check makes me doubt that
+         * 
+         * i'm changing it to Sync.statusInput.handledByAll > Sync.awaitFrame + 120. this should accomplish the same goal of requiring
+         * traffic be reestablished, and feels similar in spirit to the original check. this could potentially cause problems if awaitFrame 
+         * is wildly different for players for some reason, or if this check fails to meet some criteria of the original check that i'm 
+         * not aware of
+         */
+        [HarmonyPatch(typeof(Sync), nameof(Sync.UpdateAwait))]
+        [HarmonyTranspiler]
+        public static IEnumerable<CodeInstruction> UpdateAwaitTranspiler(IEnumerable<CodeInstruction> instructions)
+        {
+            CodeMatcher cm = new CodeMatcher(instructions);
+            cm.MatchStartForward(new InstructionBuilder()
+                .OpCode(OpCodes.Ldsfld).Operand(AccessTools.Field(typeof(Sync), nameof(Sync.statusInput)))
+                .OpCode(OpCodes.Ldfld).Operand(AccessTools.Field(typeof(Sync.FrameStatus), nameof(Sync.FrameStatus.handledByAll)))
+                .OpCode(OpCodes.Call).Operand(AccessTools.PropertyGetter(typeof(Sync), nameof(Sync.curFrame)))
+                .OpCode(OpCodes.Ldc_I4_S).Operand((sbyte)0x1E)
+                .OpCode(OpCodes.Sub)
+                .BuildAsMatch());
+            //keep the Sync.statusInput.handledByAll load, remove the Sync.curFrame - 30 part
+            cm.Advance(2);
+            cm.RemoveInstructions(3);
+            //replace Sync.curFrame - 30 with Sync.awaitFrame + 120
+            cm.Insert(new InstructionBuilder()
+                .OpCode(OpCodes.Ldsfld).Operand(AccessTools.Field(typeof(Sync), nameof(Sync.awaitFrame)))
+                .OpCode(OpCodes.Ldc_I4_S).Operand((sbyte)120)
+                .OpCode(OpCodes.Add)
+                .Build());
+            return cm.InstructionEnumeration();
+        }
+
     }
 }

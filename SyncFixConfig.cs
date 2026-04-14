@@ -22,7 +22,7 @@ namespace BlazeSyncFix
         {
             _configFile = configFile;
             enabled = configFile.Bind(new ConfigDefinition("Sync Fix", "Enable host advantage fix"), true);
-            showDebugInfo = configFile.Bind(new ConfigDefinition("Sync Fix", "Show debug info ingame"), true);
+            showDebugInfo = configFile.Bind(new ConfigDefinition("Sync Fix", "Show debug info ingame"), false);
             debugInfoKey = configFile.Bind("Sync Fix", "Toggle debug info key", KeyCode.None);
         }
 

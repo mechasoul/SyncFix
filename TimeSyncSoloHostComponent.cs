@@ -17,16 +17,16 @@ namespace BlazeSyncFix
     /// </summary>
     public class TimeSyncSoloHostComponent : TimeSyncComponentBase
     {
-        //max duration of a sleep, in seconds
-        private static readonly float MAX_SLEEP_DURATION = 30 * World.DELTA_TIME;
-        //min duration of a sleep, in seconds
+        //max duration of a sleep, in seconds (same as vanilla)
+        private static readonly float MAX_SLEEP_DURATION = 0.5f;
+        //min duration of a sleep, in seconds (1f = 0.0167s; 0.02f in vanilla)
         private static readonly float MIN_SLEEP_DURATION = World.DELTA_TIME;
         private static readonly int ESTIMATE_SLEEP_CHECK_INTERVAL = 120;
         //controls how quickly runahead updates
         private static readonly float RUN_AHEAD_UPDATE_RATE = 0.1f;
         private static readonly float RUN_AHEAD_ACCUMULATOR_THRESHOLD = 1.5f;
-        private static readonly float RECENT_SLEEP_UPPER_BOUND_FACTOR_SOLO = 0.3f;
-
+        private static readonly float RECENT_SLEEP_BASE_FACTOR = 0.3f;
+      
         private int nextRecommendedSleep = int.MaxValue;
         private float currentFrameEstimate = -1;
         private int noRunAheadUpdatesUntil = -1;
@@ -70,7 +70,6 @@ namespace BlazeSyncFix
             if (playerIndex == 0) return Sync.curFrame;
 
             float estimate = NetUtils.GetTravelTimeEstimate(Player.GetPlayer(playerIndex).peer.ping);
-            //Plugin.Logger.LogInfo($"current frame: {Sync.curFrame}, received: {Sync.statusInput.otherReceived[playerIndex]}, estimated travel time: {estimate}, est remote: {estimate + Sync.statusInput.otherReceived[playerIndex]}");
             return Sync.statusInput.otherReceived[playerIndex] + estimate;
         }
 
@@ -80,10 +79,7 @@ namespace BlazeSyncFix
             else if (Sync.curFrame == noRunAheadUpdatesUntil) noRunAheadUpdatesUntil = -1;
 
             float estimate = CurrentFrameEstimate - minimumFrame;
-            //float prevEstimate = RunAheadEstimate;
             accumulator.FrameUpdate(Sync.curFrame, estimate);
-            //FrameRecorders.Record($"runahead_p{playerIndex + 1}", Sync.curFrame, RunAheadEstimate);
-            //Plugin.Logger.LogInfo($"{Sync.curFrame} runahead estimate for p{playerIndex}: estimated run ahead {estimate}, prev: {prevEstimate}, new: {RunAheadEstimate}");
         }
 
         public override bool ShouldEmergencySleep()
@@ -95,7 +91,7 @@ namespace BlazeSyncFix
         {
             if (!accumulator.ThresholdReached()) return 0;
 
-            float sleep = Mathf.Clamp(RunAheadEstimate * World.DELTA_TIME, MIN_SLEEP_DURATION, MAX_SLEEP_DURATION);
+            float sleep = Mathf.Clamp(RunAheadEstimate * World.DELTA_TIME * ALIGN_TIMES_FACTOR, MIN_SLEEP_DURATION, MAX_SLEEP_DURATION);
             return sleep;
         }
 
@@ -107,9 +103,9 @@ namespace BlazeSyncFix
             base.OnSleep(frames);
         }
 
-        protected override float GetRecentSleepUpperBoundFactor()
+        protected override float GetRecentSleepBaseFactor()
         {
-            return RECENT_SLEEP_UPPER_BOUND_FACTOR_SOLO;
+            return RECENT_SLEEP_BASE_FACTOR;
         }
 
         protected override float GetRecentSleepWindow()
