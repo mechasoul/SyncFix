@@ -7,7 +7,7 @@ using BepInEx;
 using LLBML.Players;
 using Multiplayer;
 
-namespace BlazeSyncFix.Utils
+namespace SyncFix.Utils
 {
     internal class PathUtils
     {

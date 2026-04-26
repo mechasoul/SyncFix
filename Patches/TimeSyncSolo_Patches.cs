@@ -4,13 +4,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
 using System.Text;
-using BlazeSyncFix.Utils;
+using SyncFix.Utils;
 using HarmonyLib;
 using LLBML.Players;
 using Multiplayer;
 using UnityEngine;
 
-namespace BlazeSyncFix.Patches
+namespace SyncFix.Patches
 {
     /// <summary>
     /// contains harmony patches used for implementing the new "solo" time sync logic. while generally less effective than

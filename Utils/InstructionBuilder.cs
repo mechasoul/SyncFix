@@ -5,7 +5,7 @@ using System.Reflection.Emit;
 using System.Text;
 using HarmonyLib;
 
-namespace BlazeSyncFix.Utils
+namespace SyncFix.Utils
 {
     //brought this in for the huge AlignTimes transpiler, which we now don't use
     //TODO delete

@@ -5,7 +5,7 @@ using System.Text;
 using Multiplayer;
 using UnityEngine;
 
-namespace BlazeSyncFix
+namespace SyncFix
 {
     //note that implementation details in this base clase are mostly concerned with managing recent sleeps, which are used 
     //to automatically scale frame accumulator bounds. this makes each successive sleep harder to trigger than the last, 

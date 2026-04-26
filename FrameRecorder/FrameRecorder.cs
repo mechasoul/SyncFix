@@ -4,11 +4,11 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using BepInEx;
-using BlazeSyncFix.Utils;
+using SyncFix.Utils;
 using LLBML.Utils;
 using Multiplayer;
 
-namespace BlazeSyncFix.FrameRecorder
+namespace SyncFix.FrameRecorder
 {
     /// <summary>
     /// records data values per-frame. stores them in a list and saves as a csv, by converting frame records to text

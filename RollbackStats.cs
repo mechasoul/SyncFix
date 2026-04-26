@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using UnityEngine;
 
-namespace BlazeSyncFix
+namespace SyncFix
 {
     /// <summary>
     /// static live stat tracker for rollbacks in current game

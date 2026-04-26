@@ -9,7 +9,7 @@ using LLBML.Players;
 using LLBML.States;
 using Multiplayer;
 
-namespace BlazeSyncFix
+namespace SyncFix
 {
     
     /// <summary>

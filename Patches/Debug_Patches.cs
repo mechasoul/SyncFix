@@ -2,15 +2,16 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using BlazeSyncFix.FrameRecorder;
+using SyncFix.FrameRecorder;
 using GameplayEntities;
 using HarmonyLib;
 using LLBML.Players;
 using LLBML.Settings;
 using Multiplayer;
+using SyncFix;
 using UnityEngine;
 
-namespace BlazeSyncFix.Patches
+namespace SyncFix.Patches
 {
     [HarmonyPatch]
     public class Debug_Patches

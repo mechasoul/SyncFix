@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace BlazeSyncFix.FrameRecorder
+namespace SyncFix.FrameRecorder
 {
     /// <summary>
     /// dataholder for a single data value that's tracked per-frame

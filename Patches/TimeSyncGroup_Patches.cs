@@ -4,7 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
 using System.Text;
-using BlazeSyncFix.Utils;
+using SyncFix;
+using SyncFix.Utils;
 using HarmonyLib;
 using LLBML.Players;
 using LLScreen;
@@ -12,7 +13,7 @@ using Multiplayer;
 using UnityEngine;
 using UnityEngine.Assertions;
 
-namespace BlazeSyncFix.Patches
+namespace SyncFix.Patches
 {
     /// <summary>
     /// contains harmony patches used for implementing the new ggpo-based time sync logic. ggpo's time sync algorithm requires
@@ -123,7 +124,7 @@ namespace BlazeSyncFix.Patches
                 JKMAAHELEMF vector2i = (JKMAAHELEMF)message.ob;
                 float newDelay = vector2i.CGJJEHPPOAN * 0.5f;
                 //add an extra 30f delay to everyone if continuing from await
-                if (((Msg)vector2i.GCPKPHMKLBN) == Msg.MP_SYNC_CONTINUE)
+                if ((Msg)vector2i.GCPKPHMKLBN == Msg.MP_SYNC_CONTINUE)
                 {
                     newDelay += 30000f * World.DELTA_TIME;
                 }

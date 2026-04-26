@@ -5,7 +5,7 @@ using System.Text;
 using BepInEx.Configuration;
 using UnityEngine;
 
-namespace BlazeSyncFix
+namespace SyncFix
 {
     public class SyncFixConfig
     {

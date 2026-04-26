@@ -6,7 +6,7 @@ using LLBML.Players;
 using Multiplayer;
 using UnityEngine;
 
-namespace BlazeSyncFix
+namespace SyncFix
 {
     //this top-level object holds both a group and solo component, so we can swap between them as needed. resulting structure is a bit odd, consider refactoring somehow
     /// <summary>

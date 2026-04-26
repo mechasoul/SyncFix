@@ -2,10 +2,10 @@
 using System.Collections.Generic;
 using BepInEx;
 using BepInEx.Logging;
-using BlazeSyncFix.Utils;
+using SyncFix.Utils;
 using HarmonyLib;
 
-namespace BlazeSyncFix;
+namespace SyncFix;
 
 [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
 [BepInDependency(LLBML.PluginInfos.PLUGIN_ID, BepInDependency.DependencyFlags.HardDependency)]

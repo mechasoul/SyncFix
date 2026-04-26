@@ -3,11 +3,11 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using BlazeSyncFix.Utils;
+using SyncFix.Utils;
 using HarmonyLib;
 using Multiplayer;
 
-namespace BlazeSyncFix.Patches
+namespace SyncFix.Patches
 {
     /// <summary>
     /// contains patches for monitoring player mod state in lobby, so we know which time sync fix to use

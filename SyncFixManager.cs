@@ -6,14 +6,14 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using BlazeDevNet.FrameRecorder;
-using BlazeSyncFix.Patches;
-using BlazeSyncFix.Utils;
+using SyncFix.Patches;
+using SyncFix.Utils;
 using LLBML.Messages;
 using LLBML.Players;
 using Multiplayer;
 using UnityEngine;
 
-namespace BlazeSyncFix
+namespace SyncFix
 {
     /// <summary>
     /// functions similarly to vanilla Sync class, but with some extended functionality. manages sync information

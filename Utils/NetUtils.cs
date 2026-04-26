@@ -6,7 +6,7 @@ using LLBML.Players;
 using Multiplayer;
 using UnityEngine;
 
-namespace BlazeSyncFix.Utils
+namespace SyncFix.Utils
 {
     public class NetUtils
     {

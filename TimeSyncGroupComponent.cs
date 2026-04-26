@@ -4,12 +4,12 @@ using System.Linq;
 using System.Net.NetworkInformation;
 using System.Text;
 using BlazeDevNet.FrameRecorder;
-using BlazeSyncFix.Utils;
+using SyncFix.Utils;
 using LLBML.Players;
 using Multiplayer;
 using UnityEngine;
 
-namespace BlazeSyncFix
+namespace SyncFix
 {
     /// <summary>
     /// timesync used to align times when all players have syncfix

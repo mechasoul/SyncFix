@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using UnityEngine;
 
-namespace BlazeSyncFix
+namespace SyncFix
 {
     /*
      * vanilla llb checks advantage by performing a check every 60f. ggpo checks advantage by waiting for some predefined interval (default
