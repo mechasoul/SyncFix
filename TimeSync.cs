@@ -1,14 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using LLBML.Players;
-using Multiplayer;
-using UnityEngine;
+﻿using Multiplayer;
 
 namespace SyncFix
 {
-    //this top-level object holds both a group and solo component, so we can swap between them as needed. resulting structure is a bit odd, consider refactoring somehow
+    //this top-level object holds both a group and solo component, so we can swap between them as needed.
+    //this is goofy and i should just be using a single TimeSyncComponentBase, but i ended up with some methods 
+    //unique to group/solo that made it difficult to use just the base class. still there's surely a better
+    //way to do this so todo refactor or something?
     /// <summary>
     /// based on ggpo's time sync. represents a sync state with another player. mostly a combination of ggpo's TimeSync and UdpProtocol
     /// </summary>
@@ -75,7 +72,7 @@ namespace SyncFix
             return soloComponent.CurrentFrameEstimate;
         }
 
-        //should move SyncFixManager's NextRecommendedSleep to groupcomponent and incorporate it into this
+        //TODO move SyncFixManager's NextRecommendedSleep to groupcomponent and incorporate it into this
         public bool CanSleep()
         {
             return Sync.curFrame > soloComponent.NextRecommendedSleep || soloComponent.ShouldEmergencySleep();

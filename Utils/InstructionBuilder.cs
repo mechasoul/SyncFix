@@ -2,13 +2,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
-using System.Text;
 using HarmonyLib;
 
 namespace SyncFix.Utils
 {
-    //brought this in for the huge AlignTimes transpiler, which we now don't use
-    //TODO delete
+    //provides a way to build CodeInstruction[] and CodeMatch[] that feels more natural to me
     public class InstructionBuilder
     {
         private List<CodeInstruction> instructions = [];

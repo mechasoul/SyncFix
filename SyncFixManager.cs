@@ -1,13 +1,6 @@
 ﻿using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Text;
-using BlazeDevNet.FrameRecorder;
-using SyncFix.Patches;
-using SyncFix.Utils;
 using LLBML.Messages;
 using LLBML.Players;
 using Multiplayer;
@@ -89,6 +82,9 @@ namespace SyncFix
             UpdateNextAdvantageTime();
         }
 
+        /// <summary>
+        /// resets state mid-match. use eg when an await occurs
+        /// </summary>
         public void MidMatchReset()
         {
             if (!SyncFixConfig.Instance.Enabled) return;
@@ -244,20 +240,20 @@ namespace SyncFix
             if (Sync.isAwaiting) return;
 
             //update every client's remote frame and get minimum frame
-            float minimumFrame = float.MaxValue;
+            float minimumCurrentFrame = float.MaxValue;
             for (int i = 0; i < Sync.nPlayers; i++)
             {
                 timeSync[i].FrameUpdate();
-                if (timeSync[i].GetCurrentFrameEstimate() < minimumFrame)
+                if (timeSync[i].GetCurrentFrameEstimate() < minimumCurrentFrame)
                 {
-                    minimumFrame = timeSync[i].GetCurrentFrameEstimate();
+                    minimumCurrentFrame = timeSync[i].GetCurrentFrameEstimate();
                 }
             }
 
             //for every player (including us), update the estimate of how far ahead they are of the slowest peer, and send them a sleep if they're too far ahead
             for (int i = 0; i < Sync.nPlayers; i++)
             {
-                timeSync[i].UpdateRunAheadEstimate(minimumFrame);
+                timeSync[i].UpdateRunAheadEstimate(minimumCurrentFrame);
                 if (timeSync[i].CanSleep())
                 {
                     float sleep = timeSync[i].GetSleepInterval();

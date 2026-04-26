@@ -1,19 +1,14 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
 using LLBML.Messages;
-using LLBML.Networking;
 using LLBML.Players;
-using LLBML.States;
 using Multiplayer;
 
 namespace SyncFix
 {
     
     /// <summary>
-    /// manages mod state. determines what mode to operate in, based on the status of other players & whether they have the mod installed
+    /// manages mod state in lobby. determines what mode to operate in, based on the status of other players & whether they have the mod installed
     /// </summary>
     public class StateManager
     {
@@ -36,7 +31,7 @@ namespace SyncFix
         }
 
         public static SyncFixMode CurrentMode = SyncFixMode.SOLO;
-        private static LobbyPeerModStatus[] peerModStatus = [LobbyPeerModStatus.UNKNOWN, LobbyPeerModStatus.UNKNOWN, LobbyPeerModStatus.UNKNOWN, LobbyPeerModStatus.UNKNOWN];
+        private static readonly LobbyPeerModStatus[] peerModStatus = [LobbyPeerModStatus.UNKNOWN, LobbyPeerModStatus.UNKNOWN, LobbyPeerModStatus.UNKNOWN, LobbyPeerModStatus.UNKNOWN];
         public static bool HostHasSyncFix = false;
 
         /// <summary>
@@ -150,7 +145,7 @@ namespace SyncFix
         }
 
         //TODO nullreferenceexception from somewhere in here, i think i accidentally clicked quickmatch after backing out of an existing lobby? maybe something with lobby setup in quickmatch
-        // ^ might just be a consequence of devnet qm error
+        // ^ probably just a consequence of devnet qm error
         /// <summary>
         /// resets the mod state of all players
         /// </summary>

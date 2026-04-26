@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Collections.Generic;
 using Multiplayer;
 using UnityEngine;
 
@@ -31,7 +28,7 @@ namespace SyncFix
          * this serves the same purpose for our logic. i tried a few different values and ended up at basically the same.
          * note that when this factor causes sleep durations to dip below 1f, exact timing is difficult to predict. i think
          * unity checks to see if the sleep duration has elapsed every time it runs the update loop, the timing of which
-         * will vary from player to player since this is update and not fixedupdate
+         * will vary from player to player since this is in update and not fixedupdate
          */
         protected static readonly float ALIGN_TIMES_FACTOR = 0.8f;
 

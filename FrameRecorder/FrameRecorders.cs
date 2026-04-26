@@ -1,14 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Collections.Generic;
 
 namespace SyncFix.FrameRecorder
 {
     /// <summary>
     /// static class for recording frame values. use this to record frame values without having to manage framerecorders manually
     /// </summary>
-    public class FrameRecorders
+    internal class FrameRecorders
     {
         private static readonly Dictionary<string, IFrameRecorder> _frameRecorders;
 

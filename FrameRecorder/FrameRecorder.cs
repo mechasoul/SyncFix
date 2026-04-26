@@ -1,12 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using BepInEx;
 using SyncFix.Utils;
-using LLBML.Utils;
-using Multiplayer;
 
 namespace SyncFix.FrameRecorder
 {
@@ -14,7 +11,7 @@ namespace SyncFix.FrameRecorder
     /// records data values per-frame. stores them in a list and saves as a csv, by converting frame records to text
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    public class FrameRecorder<T> : IFrameRecorder
+    internal class FrameRecorder<T> : IFrameRecorder
     {
         /// <summary>
         /// name of the recorder. used in the saved file's name
@@ -33,7 +30,7 @@ namespace SyncFix.FrameRecorder
         }
 
 
-        internal FrameRecorder(string name)
+        public FrameRecorder(string name)
         {
             this.name = name;
             this.records = new List<FrameRecord<T>>();

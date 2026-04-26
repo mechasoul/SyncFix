@@ -1,14 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-
-namespace SyncFix.FrameRecorder
+﻿namespace SyncFix.FrameRecorder
 {
     /// <summary>
     /// an object that records data values per-frame
     /// </summary>
-    public interface IFrameRecorder
+    internal interface IFrameRecorder
     {
         /// <summary>
         /// records the given data value for the given frame

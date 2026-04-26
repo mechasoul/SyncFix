@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
 namespace SyncFix.FrameRecorder
 {
@@ -9,7 +6,7 @@ namespace SyncFix.FrameRecorder
     /// dataholder for a single data value that's tracked per-frame
     /// </summary>
     /// <typeparam name="T">the type of the data value</typeparam>
-    public class FrameRecord<T> : IComparable<FrameRecord<T>>
+    internal class FrameRecord<T> : IComparable<FrameRecord<T>>
     {
         public int frame;
         public T value;
@@ -22,7 +19,7 @@ namespace SyncFix.FrameRecorder
 
         public int CompareTo(FrameRecord<T> other)
         {
-            return this.frame.CompareTo(other.frame);
+            return frame.CompareTo(other.frame);
         }
 
         public override string ToString()

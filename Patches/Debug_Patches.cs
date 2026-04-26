@@ -1,14 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using SyncFix.FrameRecorder;
-using GameplayEntities;
+﻿using SyncFix.FrameRecorder;
 using HarmonyLib;
-using LLBML.Players;
 using LLBML.Settings;
 using Multiplayer;
-using SyncFix;
 using UnityEngine;
 
 namespace SyncFix.Patches
@@ -22,7 +15,10 @@ namespace SyncFix.Patches
         [HarmonyPrefix]
         public static bool RedirectStopNow()
         {
-            FrameRecorders.SaveAll();
+            if (SyncFixConfig.Instance.RecordDebugInfo)
+            {
+                FrameRecorders.SaveAll();
+            }
             return true;
         }
 
@@ -57,7 +53,7 @@ namespace SyncFix.Patches
         public static bool RedirectRollback(int frame)
         {
             int depth = Sync.curFrame - frame;
-            FrameRecorders.Record<int>("rollbacks", Sync.curFrame, depth);
+            if (SyncFixConfig.Instance.RecordDebugInfo) FrameRecorders.Record<int>("rollbacks", Sync.curFrame, depth);
             RollbackStats.AddRollback(depth);
             return true;
         }
@@ -67,7 +63,7 @@ namespace SyncFix.Patches
         [HarmonyPrefix]
         public static bool RedirectWait(float wait)
         {
-            FrameRecorders.Record<float>("wait", Sync.curFrame, wait);
+            if (SyncFixConfig.Instance.RecordDebugInfo) FrameRecorders.Record<float>("wait", Sync.curFrame, wait);
             RollbackStats.AddSleep(wait);
             return true;
         }

@@ -1,17 +1,8 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Collections.Generic;
 using System.Reflection.Emit;
-using System.Text;
-using SyncFix;
 using SyncFix.Utils;
 using HarmonyLib;
-using LLBML.Players;
-using LLScreen;
 using Multiplayer;
-using UnityEngine;
-using UnityEngine.Assertions;
 
 namespace SyncFix.Patches
 {
@@ -50,7 +41,7 @@ namespace SyncFix.Patches
 
             if (StateManager.IsUsingGroup())
             {
-                //entirely replace the original Sync.AlignTimes with our new version
+                //replace the original Sync.AlignTimes with our new version
                 SyncFixManager.Instance.GroupAlignTimes();
                 return false;
             }
@@ -103,7 +94,7 @@ namespace SyncFix.Patches
          * 
          * ultimately the effects are minor because time sync will kick in soon enough and fix any large difference in timing,
          * but it does give host a slight advantage at the start of the match. (could also have a measurable impact at certain
-         * low pings where the incorrect timings isn't enough to trigger a sleep but is enough to give host a consistent advantage).
+         * low pings where incorrect timings aren't enough to trigger a sleep but are enough to give host a consistent advantage).
          * fix it by halving the delays used for all 
          * P2P_TIMED messages (bonus: this doesn't require any client-side changes so it'll work for all peers even if they 
          * don't have the mod, so long as host does)
@@ -156,7 +147,7 @@ namespace SyncFix.Patches
         /*
          * ggpo sends local advantage as a part of ping messages. technically we could do the same and avoid adding any extra
          * network traffic by like, replacing obSize or something? but that's really hacky and might interfere with stuff.
-         * just send them at the same timing (ie, from P2P.Update)
+         * just send them at the same timing (ie, from P2P.Update). this adds like one extra message per second or something it's fine
          */
         [HarmonyPatch(typeof(P2P), nameof(P2P.Update))]
         [HarmonyPostfix]
@@ -209,7 +200,7 @@ namespace SyncFix.Patches
 
         /*
          * Sync.UpdateAwait requires Sync.statusInput.handledByAll > Sync.curFrame - 30 as a prerequisite to continue.
-         * when player A occurs, our sleep logic causes player B to sleep aggressively before await is triggered, because the game (correctly)
+         * when player A DCs, our sleep logic causes player B to sleep aggressively before await is triggered, because the game (correctly)
          * detects that player B is running severely ahead of player A. this causes players' current frames to become unaligned, which can 
          * cause this check to never become true again; since sleeps are disabled during awaits, this timing disparity can't possibly be
          * fixed until the game continues, but the game can't continue until the timing disparity is fixed. this causes lengthy awaits to

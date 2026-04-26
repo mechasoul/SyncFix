@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using UnityEngine;
 
 namespace SyncFix
@@ -22,7 +19,7 @@ namespace SyncFix
      * threshold, update rate) provides an algorithm that is resistant to noise but still responds quickly to real issues
      * 
      * it's a bit overkill for sure. just calculating the average of the most recent x frames or using an exponential moving average would
-     * get you like 90% of the way there
+     * get us like 90% of the way there...
      */
     /// <summary>
     /// an accumulator that adjusts per-frame based on some value. used to determine things like local frame advantage in a way that's
