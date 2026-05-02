@@ -4,7 +4,7 @@
 		<TargetFramework>net35</TargetFramework>
 		<AssemblyName>ca.gov.mechasoulindustries.llb.my.cute.syncfix</AssemblyName>
 		<Product>Sync Fix</Product>
-		<Version>1.0.0</Version>
+		<Version>1.0.1</Version>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<LangVersion>latest</LangVersion>
 		<RestoreAdditionalProjectSources>

@@ -144,8 +144,6 @@ namespace SyncFix
             ResetMode();
         }
 
-        //TODO nullreferenceexception from somewhere in here, i think i accidentally clicked quickmatch after backing out of an existing lobby? maybe something with lobby setup in quickmatch
-        // ^ probably just a consequence of devnet qm error
         /// <summary>
         /// resets the mod state of all players
         /// </summary>

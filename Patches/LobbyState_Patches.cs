@@ -47,6 +47,9 @@ namespace SyncFix.Patches
         {
             while (__result.MoveNext()) yield return __result.Current;
 
+            //GameStatesLobbyOnline.canceledQuickmatch
+            if (__instance.OFMOOCAGKBO) yield break;
+
             //GameStatesLobbyOnline.startOnline; is set when loading into an online lobby for the first time
             if (__instance.FBJIDODJNFN)
             {
