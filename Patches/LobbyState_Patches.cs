@@ -2,6 +2,7 @@
 using SyncFix.Utils;
 using HarmonyLib;
 using Multiplayer;
+using System;
 
 namespace SyncFix.Patches
 {
@@ -39,19 +40,25 @@ namespace SyncFix.Patches
             }
         }
 
-        //resets peer mod state when entering an online lobby
         //GameStatesLobbyOnline.KAfterOpen
         [HarmonyPatch(typeof(HDLIJDBFGKN), nameof(HDLIJDBFGKN.DJLJONJDDDO))]
         [HarmonyPostfix]
-        public static IEnumerator DJLJONJDDDOPostfix(IEnumerator __result, HDLIJDBFGKN __instance)
+        public static void DJLJONJDDDOPostfix(HDLIJDBFGKN __instance, ref Action<bool> BDNDCAJCNCC)
         {
-            while (__result.MoveNext()) yield return __result.Current;
+            //piggyback our code onto the existing success callback so we're resilient vs all the ways we can fail joining a lobby
+            Action<bool> oldCallback = BDNDCAJCNCC;
+            BDNDCAJCNCC = (result) => {
+                oldCallback(result);
+                KAfterOpenPostfix(__instance, result);
+            };
+        }
 
-            //GameStatesLobbyOnline.canceledQuickmatch
-            if (__instance.OFMOOCAGKBO) yield break;
+        private static void KAfterOpenPostfix(HDLIJDBFGKN gameStatesLobbyOnline, bool success)
+        {
+            if (!success) return;
 
             //GameStatesLobbyOnline.startOnline; is set when loading into an online lobby for the first time
-            if (__instance.FBJIDODJNFN)
+            if (gameStatesLobbyOnline.FBJIDODJNFN)
             {
                 StateManager.ResetState();
             }

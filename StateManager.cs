@@ -151,6 +151,9 @@ namespace SyncFix
         {
             if (!SyncFixConfig.Instance.Enabled) return;
 
+            //probably not needed with the better KAfterOpen checking but might as well
+            if (!P2P.isConnected) return;
+
             for (int i = 0; i < peerModStatus.Length; i++)
             {
                 SetPeerModStatus(i, i == P2P.localPeer.playerNr ? LobbyPeerModStatus.CONFIRMED : LobbyPeerModStatus.UNKNOWN);
